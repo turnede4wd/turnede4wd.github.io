@@ -323,88 +323,89 @@ setInterval(() => {
 
         
         // 解析串口數據
-        function parseSerialData(text) {
-            appendToSerialMonitor(text);
-            
-            // 將新數據添加到緩衝區
-            buffer += text;
-            
-            // 按行分割緩衝區
-            const lines = buffer.split('\n');
-            
-            // 如果最後一行不完整，保留在緩衝區中
-            if (!text.endsWith('\n')) {
-                buffer = lines.pop();
-            } else {
-                buffer = '';
+       function parseSerialData(text) {
+    appendToSerialMonitor(text);
+    
+    // 將新數據添加到緩衝區
+    buffer += text;
+    
+    // 按行分割緩衝區
+    const lines = buffer.split('\n');
+    
+    // 如果最後一行不完整，保留在緩衝區中
+    if (!text.endsWith('\n')) {
+        buffer = lines.pop();
+    } else {
+        buffer = '';
+    }
+    
+    for (const line of lines) {
+        const trimmedLine = line.trim();
+        if (!trimmedLine) continue;
+        
+        try {
+            // 檢查是否是計數器行（忽略不處理）
+            if (trimmedLine.toLowerCase().startsWith('counter') || 
+                trimmedLine.toLowerCase().startsWith('countr') ||
+                trimmedLine.toLowerCase().startsWith('couter') ||
+                trimmedLine.toLowerCase().startsWith('couner') ||
+                trimmedLine.toLowerCase().startsWith('counte') ||
+                trimmedLine.toLowerCase().startsWith('cunter')) {
+                continue;
             }
             
-            for (const line of lines) {
-                const trimmedLine = line.trim();
-                if (!trimmedLine) continue;
+            // 更寬鬆的加速度數據解析
+            const accelMatch = trimmedLine.match(/([XYZ])\s*Acc?[ce]{1,3}l?e?:\s*(-?\d+)/i);
+            if (accelMatch) {
+                const axis = accelMatch[1].toLowerCase();
+                const value = parseFloat(accelMatch[2]);
+                const timestamp = new Date().toLocaleTimeString();
                 
-                try {
-                    // 解析加速度數據
-                    const accelMatch = trimmedLine.match(/([XYZ])\sAccele:(-?\d+\.\d+)/);
-                    if (accelMatch) {
-                        const axis = accelMatch[1].toLowerCase();
-                        const value = parseFloat(accelMatch[2]);
-                        const timestamp = new Date().toLocaleTimeString();
-                        
-                        // 根據軸更新數據
-                        if (axis === 'x') {
-                            data.accelX.push(value);
-                            if (data.accelX.length > MAX_DATA_POINTS) data.accelX.shift();
-                        } else if (axis === 'y') {
-                            data.accelY.push(value);
-                            if (data.accelY.length > MAX_DATA_POINTS) data.accelY.shift();
-                        } else if (axis === 'z') {
-                            data.accelZ.push(value);
-                            if (data.accelZ.length > MAX_DATA_POINTS) data.accelZ.shift();
-                        }
-                        
-                        // 只在X軸數據到達時添加時間戳(假設X軸數據最先到達)
-                        if (axis === 'x') {
-                            data.timestamps.push(timestamp);
-                            if (data.timestamps.length > MAX_DATA_POINTS) data.timestamps.shift();
-                        }
-                        
-                        updateCharts();
-                    } 
-                    // 解析陀螺儀數據
-                    else {
-                        const gyroMatch = trimmedLine.match(/([XYZ])\sGyrosc:(-?\d+\.\d+)/);
-                        if (gyroMatch) {
-                            const axis = gyroMatch[1].toLowerCase();
-                            const value = parseFloat(gyroMatch[2]);
-                            const timestamp = new Date().toLocaleTimeString();
-                            
-                            // 根據軸更新數據
-                            if (axis === 'x') {
-                                data.gyroX.push(value);
-                                if (data.gyroX.length > MAX_DATA_POINTS) data.gyroX.shift();
-                            } else if (axis === 'y') {
-                                data.gyroY.push(value);
-                                if (data.gyroY.length > MAX_DATA_POINTS) data.gyroY.shift();
-                            } else if (axis === 'z') {
-                                data.gyroZ.push(value);
-                                if (data.gyroZ.length > MAX_DATA_POINTS) data.gyroZ.shift();
-                            }
-                            
-                            // 只在X軸數據到達時添加時間戳(假設X軸數據最先到達)
-                            if (axis === 'x') {
-                                data.timestamps.push(timestamp);
-                                if (data.timestamps.length > MAX_DATA_POINTS) data.timestamps.shift();
-                            }
-                            
-                            updateCharts2();
-                        }
+                // 根據軸更新數據
+                if (axis === 'x') {
+                    data.accelX.push(value);
+                    if (data.accelX.length > MAX_DATA_POINTS) data.accelX.shift();
+                    // X軸數據到達時添加時間戳
+                    data.timestamps.push(timestamp);
+                    if (data.timestamps.length > MAX_DATA_POINTS) data.timestamps.shift();
+                } else if (axis === 'y') {
+                    data.accelY.push(value);
+                    if (data.accelY.length > MAX_DATA_POINTS) data.accelY.shift();
+                } else if (axis === 'z') {
+                    data.accelZ.push(value);
+                    if (data.accelZ.length > MAX_DATA_POINTS) data.accelZ.shift();
+                }
+                
+                updateCharts();
+            } 
+            // 更寬鬆的陀螺儀數據解析（如果有）
+            else {
+                const gyroMatch = trimmedLine.match(/([XYZ])\s*Gyro?[sc]{1,3}l?e?:\s*(-?\d+)/i);
+                if (gyroMatch) {
+                    const axis = gyroMatch[1].toLowerCase();
+                    const value = parseFloat(gyroMatch[2]);
+                    
+                    // 根據軸更新數據
+                    if (axis === 'x') {
+                        data.gyroX.push(value);
+                        if (data.gyroX.length > MAX_DATA_POINTS) data.gyroX.shift();
+                    } else if (axis === 'y') {
+                        data.gyroY.push(value);
+                        if (data.gyroY.length > MAX_DATA_POINTS) data.gyroY.shift();
+                    } else if (axis === 'z') {
+                        data.gyroZ.push(value);
+                        if (data.gyroZ.length > MAX_DATA_POINTS) data.gyroZ.shift();
                     }
-                } catch (error) {
-                    console.error('解析錯誤:', error, '行內容:', line);
+                    
+                    updateCharts2();
                 }
             }
+        } catch (error) {
+            console.error('解析錯誤:', error, '行內容:', line);
         }
+    }
+}
+
         
         // 讀取串口數據
         async function readSerialData() {
