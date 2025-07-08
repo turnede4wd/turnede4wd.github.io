@@ -355,6 +355,11 @@ function parseSerialData(text) {
                     const timestamp = new Date().toLocaleTimeString();
                     
                     // 更新加速度計數據
+                    if(accelZ>0 && accelZ<200){
+                        accelZ+=1000;
+                    }else if(accelZ<0 && accelZ>-200){
+                        accelZ-=1000;
+                    }
                     data.accelX.push(accelX);
                     data.accelY.push(accelY);
                     data.accelZ.push(accelZ);
