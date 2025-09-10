@@ -140,6 +140,8 @@ Y Gyrosc:3.36641221374046</pre>
         let port = null;
         let reader = null;
         let isReading = false;
+
+        let readingData = [];
         
         // 初始化圖表
         const accelCtx = document.getElementById('accelChart').getContext('2d');
@@ -321,6 +323,12 @@ setInterval(() => {
     }
 }, 60000); // 60000 毫秒 = 60 秒
 
+function calculateAverage(property) {
+    if (readingData.length === 0) return 0;
+    const sum = readingData.reduce((acc, item) => acc + item[property], 0);
+    return sum / readingData.length;
+}
+
 // 解析串口數據
 function parseSerialData(text) {
     appendToSerialMonitor(text);
@@ -352,22 +360,26 @@ function parseSerialData(text) {
                 try {
                     // 只取前6個有效數值（寬鬆處理，不因格式問題丟棄數據）
                     const [accelX, accelY, accelZ, gyroX, gyroY, gyroZ] = values.slice(0, 6);
+                    
+                    // Store raw data in readingData
+                    readingData.push({ accelX, accelY, accelZ, gyroX, gyroY, gyroZ });
+                    
+                    // Limit readingData to the latest 5 data points
+                    if (readingData.length > 5) {
+                        readingData.shift();
+                    }
+
                     const timestamp = new Date().toLocaleTimeString();
                     
-                    // 更新加速度計數據
-                    // if(accelZ>0 && accelZ<200){
-                    //     accelZ+=1000;
-                    // }else if(accelZ<0 && accelZ>-200){
-                    //     accelZ-=1000;
-                    // }
-                    data.accelX.push(accelX*0.00980665);
-                    data.accelY.push(accelY*0.00980665);
-                    data.accelZ.push(accelZ*0.00980665);
+                    // Update accelerometer data with scaled averages
+                    data.accelX.push(calculateAverage('accelX') * 0.00980665);
+                    data.accelY.push(calculateAverage('accelY') * 0.00980665);
+                    data.accelZ.push(calculateAverage('accelZ') * 0.00980665);
                     
-                    // 更新陀螺儀數據
-                    data.gyroX.push(gyroX*0.001);
-                    data.gyroY.push(gyroY*0.001);
-                    data.gyroZ.push(gyroZ*0.001);
+                    // Update gyroscope data with scaled averages
+                    data.gyroX.push(calculateAverage('gyroX') * 0.001);
+                    data.gyroY.push(calculateAverage('gyroY') * 0.001);
+                    data.gyroZ.push(calculateAverage('gyroZ') * 0.001);
                     
                     // 添加時間戳
                     data.timestamps.push(timestamp);
