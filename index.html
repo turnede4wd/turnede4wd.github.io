@@ -343,7 +343,7 @@ function parseSerialData(text) {
         buffer = groups.pop() || '';
         
         // 緩衝區用於存儲5組數據
-        const readingBuffer = [];
+        readingBuffer = [];
         
         // 處理每個完整的數據組
         for (const group of groups) {
