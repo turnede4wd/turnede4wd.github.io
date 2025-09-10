@@ -365,9 +365,9 @@ function parseSerialData(text) {
                     data.accelZ.push(accelZ*0.00980665);
                     
                     // 更新陀螺儀數據
-                    data.gyroX.push(gyroX/1000.0);
-                    data.gyroY.push(gyroY/1000.0);
-                    data.gyroZ.push(gyroZ/1000.0);
+                    data.gyroX.push(gyroX*0.001);
+                    data.gyroY.push(gyroY*0.001);
+                    data.gyroZ.push(gyroZ*0.001);
                     
                     // 添加時間戳
                     data.timestamps.push(timestamp);
