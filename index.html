@@ -527,6 +527,8 @@ function parseSerialData(text) {
             document.getElementById('status').textContent = '未連接';
             document.getElementById('status').className = 'disconnected';
         });
+
+        document.getElementById('exportCsvButton').addEventListener('click', exportToCsv);
         
         // 清除串口監視器內容
         document.getElementById('clearSerialBtn').addEventListener('click', () => {
