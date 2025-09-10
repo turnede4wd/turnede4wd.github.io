@@ -114,6 +114,7 @@
         <h2>串口輸入監視器</h2>
         <button id="clearSerialBtn" class="clear-btn">清除內容</button>
         <div class="serial-content" id="serialContent"></div>
+        <button id="exportCsvButton">匯出 CSV</button>
     </div>
 
     <script>
@@ -407,6 +408,41 @@ function parseSerialData(text) {
         }
     }
 }
+
+        // Function to export data to CSV
+        function exportToCsv() {
+            // Define CSV headers
+            const headers = ['Timestamp', 'AccelX', 'AccelY', 'AccelZ', 'GyroX', 'GyroY', 'GyroZ'];
+            
+            // Combine data into rows
+            const rows = data.timestamps.map((timestamp, index) => {
+                return [
+                    `"${timestamp}"`, // Enclose timestamp in quotes to handle commas
+                    data.accelX[index],
+                    data.accelY[index],
+                    data.accelZ[index],
+                    data.gyroX[index],
+                    data.gyroY[index],
+                    data.gyroZ[index]
+                ].join(',');
+            });
+            
+            // Create CSV content
+            const csvContent = [headers.join(','), ...rows].join('\n');
+            
+            // Create a Blob for download
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            
+            // Create a temporary link to trigger download
+            const link = document.createElement('a');
+            link.setAttribute('href', url);
+            link.setAttribute('download', 'imu_data.csv');
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        }
         
         // 讀取串口數據
         async function readSerialData() {
