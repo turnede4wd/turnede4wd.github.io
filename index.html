@@ -399,7 +399,7 @@ function parseSerialData(text) {
                         updateCharts2();
                         
                         // 清空緩衝區以準備下一組5個數據
-                        readingBuffer.length = 0;
+                        readingBuffer= [];
                     }
                 } catch (error) {
                     console.error('解析錯誤:', error, '組內容:', group);
