@@ -321,6 +321,8 @@ setInterval(() => {
     }
 }, 60000); // 60000 毫秒 = 60 秒
 
+let readingBuffer = [];
+
 // 解析串口數據
 function parseSerialData(text) {
     // Log raw input text
@@ -343,7 +345,7 @@ function parseSerialData(text) {
         buffer = groups.pop() || '';
         
         // 緩衝區用於存儲5組數據
-        readingBuffer = [];
+        
         
         // 處理每個完整的數據組
         for (const group of groups) {
