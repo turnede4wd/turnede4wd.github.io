@@ -370,16 +370,34 @@ function parseSerialData(text) {
                         const avgGyroY = readingBuffer.reduce((sum, reading) => sum + reading.gyroY, 0) / 5;
                         const avgGyroZ = readingBuffer.reduce((sum, reading) => sum + reading.gyroZ, 0) / 5;
                         
-                        // 更新加速度計數據（mg 轉 m/s²）
-                        data.accelX.push(avgAccelX * 0.00980665);
-                        data.accelY.push(avgAccelY * 0.00980665);
-                        data.accelZ.push(avgAccelZ * 0.00980665);
+                        // 轉換單位：加速度計（mg 轉 m/s²），陀螺儀（mdps 轉 dps）
+                        const avgAccelX_ms2 = avgAccelX * 0.00980665;
+                        const avgAccelY_ms2 = avgAccelY * 0.00980665;
+                        const avgAccelZ_ms2 = avgAccelZ * 0.00980665;
+                        const avgGyroX_dps = avgGyroX * 0.001;
+                        const avgGyroY_dps = avgGyroY * 0.001;
+                        const avgGyroZ_dps = avgGyroZ * 0.001;
                         
-                        // 更新陀螺儀數據（mdps 轉 dps）
-                        data.gyroX.push(avgGyroX * 0.001);
-                        data.gyroY.push(avgGyroY * 0.001);
-                        data.gyroZ.push(avgGyroZ * 0.001);
+                        // 打印平均值到控制台
+                        console.log('Averaged Data:', {
+                            timestamp,
+                            accelX_ms2: avgAccelX_ms2.toFixed(4),
+                            accelY_ms2: avgAccelY_ms2.toFixed(4),
+                            accelZ_ms2: avgAccelZ_ms2.toFixed(4),
+                            gyroX_dps: avgGyroX_dps.toFixed(4),
+                            gyroY_dps: avgGyroY_dps.toFixed(4),
+                            gyroZ_dps: avgGyroZ_dps.toFixed(4)
+                        });
                         
+                        // 更新加速度計數據
+                        data.accelX.push(avgAccelX_ms2);
+                        data.accelY.push(avgAccelY_ms2);
+                        data.accelZ.push(avgAccelZ_ms2);
+                        
+                        // 更新陀螺儀數據
+                        data.gyroX.push(avgGyroX_dps);
+                        data.gyroY.push(avgGyroY_dps);
+                        data.gyroZ.push(avgGyroZ_dps);
                         // 添加時間戳
                         data.timestamps.push(timestamp);
                         
