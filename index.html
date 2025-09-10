@@ -333,7 +333,6 @@ function parseSerialData(text) {
     
     // 檢查是否有完整的分割線（至少6個-）
     const hasSeparator = buffer.includes('------');
-    console.log('Has separator:', hasSeparator, 'Buffer length:', buffer.length);
     
     // 如果有分割線，則處理數據
     if (hasSeparator) {
@@ -342,7 +341,6 @@ function parseSerialData(text) {
         
         // 最後一部分可能是不完整的，保留在緩衝區中
         buffer = groups.pop() || '';
-        console.log('Parsed groups:', groups, 'Remaining buffer:', buffer);
         
         // 緩衝區用於存儲5組數據
         const readingBuffer = [];
@@ -358,8 +356,6 @@ function parseSerialData(text) {
                                    return match ? parseFloat(match[0].split(':')[1]) : NaN;
                                })
                                .filter(num => !isNaN(num));
-            
-            console.log('Parsed values for group:', values);
             
             // 檢查是否有足夠的數據（6個數值：Accel X/Y/Z, Gyro X/Y/Z）
             if (values.length >= 6) {
