@@ -1,179 +1,491 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>IMU 數據可視化</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        body { font-family: Arial, sans-serif; text-align: center; }
-        canvas { max-width: 600px; margin: 20px auto; }
-        #serialMonitor { width: 80%; height: 150px; margin: 10px auto; }
-        button { margin: 5px; padding: 10px; }
-        #status { color: red; }
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        .chart-container {
+            width: 45%;
+            min-width: 400px;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .serial-monitor {
+            width: 100%;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-top: 20px;
+        }
+        .serial-content {
+            height: 200px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            padding: 10px;
+            font-family: monospace;
+            background-color: #f8f8f8;
+            white-space: pre-wrap;
+        }
+        .controls {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        button {
+            padding: 8px 15px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #status {
+            margin-top: 10px;
+            padding: 8px;
+            border-radius: 4px;
+        }
+        .connected {
+            background-color: #dff0d8;
+            color: #3c763d;
+        }
+        .disconnected {
+            background-color: #f2dede;
+            color: #a94442;
+        }
+        .data-info {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #666;
+        }
+        .clear-btn {
+            background-color: #f44336;
+        }
+        .clear-btn:hover {
+            background-color: #d32f2f;
+        }
     </style>
 </head>
 <body>
     <h1>IMU 數據可視化</h1>
-    <button onclick="connectSerial()">連接串口</button>
-    <button onclick="disconnectSerial()">斷開連接</button>
-    <p id="status">未連接</p>
-    <p>串口設置: 115200 baud</p>
-    <p>數據格式範例:</p>
-    <pre>
-X Accele:0.514892578125
-Y Gyrosc:3.36641221374046
-    </pre>
-    <h2>加速度 (m/s²)</h2>
-    <canvas id="accelChart"></canvas>
-    <h2>陀螺儀 (radians/s)</h2>
-    <canvas id="gyroChart"></canvas>
-    <h2>串口輸入監視器</h2>
-    <textarea id="serialMonitor" readonly></textarea><br>
-    <button onclick="clearMonitor()">清除內容</button>
+    
+    <div class="controls">
+        <button id="connectBtn">連接串口</button>
+        <button id="disconnectBtn">斷開連接</button>
+        <div id="status" class="disconnected">未連接</div>
+        <div class="data-info">
+            <p>串口設置: 115200 baud</p>
+            <p>數據格式範例:</p>
+            <pre>X Accele:0.514892578125
+Y Gyrosc:3.36641221374046</pre>
+        </div>
+    </div>
+    
+    <div class="container">
+        <div class="chart-container">
+            <h2>加速度 (m/s²)</h2>
+            <canvas id="accelChart"></canvas>
+        </div>
+        <div class="chart-container">
+            <h2>陀螺儀 (radians/s)</h2>
+            <canvas id="gyroChart"></canvas>
+        </div>
+    </div>
+    
+    <div class="serial-monitor">
+        <h2>串口輸入監視器</h2>
+        <button id="clearSerialBtn" class="clear-btn">清除內容</button>
+        <div class="serial-content" id="serialContent"></div>
+    </div>
 
     <script>
-        let port;
-        let reader;
-        let accelChart, gyroChart;
-        let accelData = [];
-        let gyroData = [];
-        const maxDataPoints = 50; // Max points to display on chart
-        const avgWindow = 5; // Number of readings to average
-        let accelBuffer = [];
-        let gyroBuffer = [];
+        // 最大數據點數
+        const MAX_DATA_POINTS = 100;
+        
+        // 初始化數據結構
+        let data = {
+            accelX: [],
+            accelY: [],
+            accelZ: [],
+            gyroX: [],
+            gyroY: [],
+            gyroZ: [],
+            timestamps: []
+        };
+        
+        // 緩存不完整的行
+        let buffer = '';
 
-        // Initialize Charts
-        function initCharts() {
-            accelChart = new Chart(document.getElementById('accelChart'), {
-                type: 'line',
-                data: {
-                    labels: [],
-                    datasets: [{
-                        label: 'X 加速度 (m/s²)',
+        // 串口連接相關變量
+        let port = null;
+        let reader = null;
+        let isReading = false;
+        
+        // 初始化圖表
+        const accelCtx = document.getElementById('accelChart').getContext('2d');
+        const gyroCtx = document.getElementById('gyroChart').getContext('2d');
+        
+        const accelChart = new Chart(accelCtx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [
+                    {
+                        label: 'X軸',
                         data: [],
-                        borderColor: 'blue',
-                        fill: false
-                    }]
-                },
-                options: {
-                    scales: {
-                        x: { title: { display: true, text: '時間' } },
-                        y: { title: { display: true, text: '加速度 (m/s²)' } }
-                    }
-                }
-            });
-
-            gyroChart = new Chart(document.getElementById('gyroChart'), {
-                type: 'line',
-                data: {
-                    labels: [],
-                    datasets: [{
-                        label: 'Y 陀螺儀 (radians/s)',
+                        borderColor: 'rgb(255, 99, 132)',
+                        backgroundColor: 'rgba(255, 99, 132, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.1
+                    },
+                    {
+                        label: 'Y軸',
                         data: [],
-                        borderColor: 'green',
-                        fill: false
-                    }]
-                },
-                options: {
-                    scales: {
-                        x: { title: { display: true, text: '時間' } },
-                        y: { title: { display: true, text: '角速度 (radians/s)' } }
+                        borderColor: 'rgb(54, 162, 235)',
+                        backgroundColor: 'rgba(54, 162, 235, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.1
+                    },
+                    {
+                        label: 'Z軸',
+                        data: [],
+                        borderColor: 'rgb(75, 192, 192)',
+                        backgroundColor: 'rgba(75, 192, 192, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.1
                     }
-                }
-            });
-        }
-
-        // Parse Serial Data
-        function parseSerialData(data) {
-            const lines = data.split('\n');
-            lines.forEach(line => {
-                line = line.trim();
-                if (line.startsWith('X Accele:')) {
-                    const value = parseFloat(line.replace('X Accele:', ''));
-                    if (!isNaN(value)) {
-                        accelBuffer.push(value);
-                        if (accelBuffer.length >= avgWindow) {
-                            const avg = accelBuffer.reduce((sum, val) => sum + val, 0) / avgWindow;
-                            updateChart(accelChart, avg);
-                            accelBuffer.shift(); // Remove oldest value
+                ]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: {
+                        beginAtZero: false,
+                        title: {
+                            display: true,
+                            text: '加速度 (m/s²)'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: '時間'
                         }
                     }
-                } else if (line.startsWith('Y Gyrosc:')) {
-                    const value = parseFloat(line.replace('Y Gyrosc:', ''));
-                    if (!isNaN(value)) {
-                        gyroBuffer.push(value);
-                        if (gyroBuffer.length >= avgWindow) {
-                            const avg = gyroBuffer.reduce((sum, val) => sum + val, 0) / avgWindow;
-                            updateChart(gyroChart, avg);
-                            gyroBuffer.shift(); // Remove oldest value
+                },
+                animation: {
+                    duration: 0
+                }
+            }
+        });
+        
+        const gyroChart = new Chart(gyroCtx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [
+                    {
+                        label: 'X軸',
+                        data: [],
+                        borderColor: 'rgb(255, 99, 132)',
+                        backgroundColor: 'rgba(255, 99, 132, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.1
+                    },
+                    {
+                        label: 'Y軸',
+                        data: [],
+                        borderColor: 'rgb(54, 162, 235)',
+                        backgroundColor: 'rgba(54, 162, 235, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.1
+                    },
+                    {
+                        label: 'Z軸',
+                        data: [],
+                        borderColor: 'rgb(75, 192, 192)',
+                        backgroundColor: 'rgba(75, 192, 192, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.1
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: {
+                        beginAtZero: false,
+                        title: {
+                            display: true,
+                            text: '角速度 (degree/s)'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: '時間'
                         }
                     }
+                },
+                animation: {
+                    duration: 0
                 }
-                document.getElementById('serialMonitor').value += line + '\n';
+            }
+        });
+        
+        // 更新圖表數據
+        function updateCharts() {
+            // 限制數據點數量
+            if (data.accelX.length > MAX_DATA_POINTS) {
+                const removeCount = data.accelX.length - MAX_DATA_POINTS;
+                data.timestamps.splice(0, removeCount);
+                data.accelX.splice(0, removeCount);
+                data.accelY.splice(0, removeCount);
+                data.accelZ.splice(0, removeCount);
+            }
+            
+            // 更新加速度圖表
+            accelChart.data.labels = data.timestamps.slice(-MAX_DATA_POINTS);
+            accelChart.data.datasets[0].data = data.accelX.slice(-MAX_DATA_POINTS);
+            accelChart.data.datasets[1].data = data.accelY.slice(-MAX_DATA_POINTS);
+            accelChart.data.datasets[2].data = data.accelZ.slice(-MAX_DATA_POINTS);
+            accelChart.update('none');
+        }
+
+        function updateCharts2() {
+            // 限制數據點數量
+            if (data.gyroX.length > MAX_DATA_POINTS) {
+                const removeCount = data.gyroX.length - MAX_DATA_POINTS;
+                data.timestamps.splice(0, removeCount);
+                data.gyroX.splice(0, removeCount);
+                data.gyroY.splice(0, removeCount);
+                data.gyroZ.splice(0, removeCount);
+            }
+            
+            // 更新陀螺儀圖表
+            gyroChart.data.labels = data.timestamps.slice(-MAX_DATA_POINTS);
+            gyroChart.data.datasets[0].data = data.gyroX.slice(-MAX_DATA_POINTS);
+            gyroChart.data.datasets[1].data = data.gyroY.slice(-MAX_DATA_POINTS);
+            gyroChart.data.datasets[2].data = data.gyroZ.slice(-MAX_DATA_POINTS);
+            gyroChart.update('none');
+        }
+        
+       const MAX_LINES = 100; // 最大行数
+
+// 显示串口数据到监视器
+function appendToSerialMonitor(text) {
+    const serialContent = document.getElementById('serialContent');
+    
+    // 添加新行到监视器
+    serialContent.textContent += text;
+
+    // 保留最近 50 行
+    const lines = serialContent.textContent.split('\n');
+    if (lines.length > MAX_LINES) {
+        serialContent.textContent = lines.slice(lines.length - MAX_LINES).join('\n');
+    }
+
+    // 自动滚动到底部
+    serialContent.scrollTop = serialContent.scrollHeight;
+}
+
+// 定时清理网页缓存（每60秒清理一次）
+setInterval(() => {
+    if ('caches' in window) {
+        caches.keys().then(cacheNames => {
+            cacheNames.forEach(cacheName => {
+                caches.delete(cacheName);
             });
-        }
+        });
+        console.log('网页缓存已清理！');
+    }
+}, 60000); // 60000 毫秒 = 60 秒
 
-        // Update Chart with Averaged Data
-        function updateChart(chart, value) {
-            const now = new Date().toLocaleTimeString();
-            chart.data.labels.push(now);
-            chart.data.datasets[0].data.push(value);
-
-            if (chart.data.labels.length > maxDataPoints) {
-                chart.data.labels.shift();
-                chart.data.datasets[0].data.shift();
-            }
-            chart.update();
-        }
-
-        // Connect to Serial Port
-        async function connectSerial() {
-            try {
-                port = await navigator.serial.requestPort({});
-                await port.open({ baudRate: 115200 });
-                document.getElementById('status').textContent = '已連接';
-                document.getElementById('status').style.color = 'green';
-                reader = port.readable.getReader();
-                readSerial();
-            } catch (error) {
-                document.getElementById('status').textContent = '連接失敗: ' + error;
-            }
-        }
-
-        // Disconnect Serial Port
-        async function disconnectSerial() {
-            if (reader) {
-                await reader.cancel();
-                reader.releaseLock();
-                await port.close();
-                document.getElementById('status').textContent = '未連接';
-                document.getElementById('status').style.color = 'red';
-            }
-        }
-
-        // Read Serial Data
-        async function readSerial() {
-            while (port.readable) {
+// 解析串口數據
+function parseSerialData(text) {
+    appendToSerialMonitor(text);
+    
+    // 將新數據添加到緩衝區
+    buffer += text;
+    
+    // 檢查是否有完整的分割線（至少6個-）
+    const hasSeparator = buffer.includes('------');
+    
+    // 如果有分割線，則處理數據
+    if (hasSeparator) {
+        // 按分割線分割數據組
+        const groups = buffer.split(/------+/);
+        
+        // 最後一部分可能是不完整的，保留在緩衝區中
+        buffer = groups.pop();
+        
+        // 處理每個完整的數據組
+        for (const group of groups) {
+            // 更寬鬆的數據分割：支持換行、空格、逗號等多種分隔符
+            const values = group.split(/[\n\s,;]+/)
+                                .filter(item => item.trim() !== '')
+                                .map(item => parseFloat(item))
+                                .filter(num => !isNaN(num));
+            
+            // 檢查是否有足夠的數據（至少6個數值）
+            if (values.length >= 6) {
                 try {
+                    // 只取前6個有效數值（寬鬆處理，不因格式問題丟棄數據）
+                    const [accelX, accelY, accelZ, gyroX, gyroY, gyroZ] = values.slice(0, 6);
+                    const timestamp = new Date().toLocaleTimeString();
+                    
+                    // 更新加速度計數據
+                    // if(accelZ>0 && accelZ<200){
+                    //     accelZ+=1000;
+                    // }else if(accelZ<0 && accelZ>-200){
+                    //     accelZ-=1000;
+                    // }
+                    data.accelX.push(accelX*0.00980665);
+                    data.accelY.push(accelY*0.00980665);
+                    data.accelZ.push(accelZ*0.00980665);
+                    
+                    // 更新陀螺儀數據
+                    data.gyroX.push(gyroX*0.001);
+                    data.gyroY.push(gyroY*0.001);
+                    data.gyroZ.push(gyroZ*0.001);
+                    
+                    // 添加時間戳
+                    data.timestamps.push(timestamp);
+                    
+                    // 限制數據點數量
+                    if (data.accelX.length > MAX_DATA_POINTS) {
+                        data.accelX.shift();
+                        data.accelY.shift();
+                        data.accelZ.shift();
+                        data.gyroX.shift();
+                        data.gyroY.shift();
+                        data.gyroZ.shift();
+                        data.timestamps.shift();
+                    }
+                    
+                    // 更新圖表
+                    updateCharts();
+                    updateCharts2();
+                    
+                } catch (error) {
+                    console.error('解析錯誤:', error, '組內容:', group);
+                }
+            }   else {
+                console.log('Invalid group, insufficient values:', values);
+            }
+            // 如果不足6個數據，則忽略這組數據
+        }
+    }
+}
+        
+        // 讀取串口數據
+        async function readSerialData() {
+            try {
+                while (port && isReading) {
                     const { value, done } = await reader.read();
-                    if (done) break;
+                    if (done) {
+                        console.log('串口讀取完成');
+                        break;
+                    }
+                    
+                    // 將接收到的數據轉換為文本
                     const text = new TextDecoder().decode(value);
                     parseSerialData(text);
-                } catch (error) {
-                    document.getElementById('status').textContent = '讀取錯誤: ' + error;
-                    break;
+                }
+            } catch (error) {
+                console.error('讀取錯誤:', error);
+                document.getElementById('status').textContent = '讀取錯誤: ' + error.message;
+                document.getElementById('status').className = 'disconnected';
+                isReading = false;
+                
+                // 嘗試重新連接
+                if (port) {
+                    setTimeout(() => {
+                        if (isReading) {
+                            console.log('嘗試重新連接...');
+                            readSerialData();
+                        }
+                    }, 1000);
                 }
             }
+            
+            if (reader) {
+                reader.releaseLock();
+            }
         }
-
-        // Clear Serial Monitor
-        function clearMonitor() {
-            document.getElementById('serialMonitor').value = '';
-        }
-
-        // Initialize on Page Load
-        window.onload = initCharts;
+        
+        // 連接串口
+        document.getElementById('connectBtn').addEventListener('click', async () => {
+            try {
+                port = await navigator.serial.requestPort();
+                await port.open({ baudRate: 115200 });
+                
+                reader = port.readable.getReader();
+                isReading = true;
+                
+                document.getElementById('status').textContent = '已連接';
+                document.getElementById('status').className = 'connected';
+                
+                readSerialData();
+                
+            } catch (error) {
+                console.error('串口連接錯誤:', error);
+                document.getElementById('status').textContent = '連接錯誤: ' + error.message;
+                document.getElementById('status').className = 'disconnected';
+            }
+        });
+        
+        // 斷開串口連接
+        document.getElementById('disconnectBtn').addEventListener('click', async () => {
+            isReading = false;
+            
+            if (reader) {
+                try {
+                    await reader.cancel();
+                } catch (error) {
+                    console.error('取消讀取錯誤:', error);
+                }
+                reader.releaseLock();
+                reader = null;
+            }
+            
+            if (port) {
+                try {
+                    await port.close();
+                } catch (error) {
+                    console.error('關閉串口錯誤:', error);
+                }
+                port = null;
+            }
+            
+            document.getElementById('status').textContent = '未連接';
+            document.getElementById('status').className = 'disconnected';
+        });
+        
+        // 清除串口監視器內容
+        document.getElementById('clearSerialBtn').addEventListener('click', () => {
+            document.getElementById('serialContent').textContent = '';
+        });
     </script>
 </body>
 </html>
