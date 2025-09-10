@@ -290,7 +290,7 @@ Y Gyrosc:3.36641221374046</pre>
             gyroChart.update('none');
         }
         
-       const MAX_LINES = 50; // 最大行数
+       const MAX_LINES = 100; // 最大行数
 
 // 显示串口数据到监视器
 function appendToSerialMonitor(text) {
@@ -355,19 +355,19 @@ function parseSerialData(text) {
                     const timestamp = new Date().toLocaleTimeString();
                     
                     // 更新加速度計數據
-                    if(accelZ>0 && accelZ<200){
-                        accelZ+=1000;
-                    }else if(accelZ<0 && accelZ>-200){
-                        accelZ-=1000;
-                    }
-                    data.accelX.push(accelX);
-                    data.accelY.push(accelY);
-                    data.accelZ.push(accelZ);
+                    // if(accelZ>0 && accelZ<200){
+                    //     accelZ+=1000;
+                    // }else if(accelZ<0 && accelZ>-200){
+                    //     accelZ-=1000;
+                    // }
+                    data.accelX.push(accelX/1000.0);
+                    data.accelY.push(accelY/1000.0);
+                    data.accelZ.push(accelZ/1000.0);
                     
                     // 更新陀螺儀數據
-                    data.gyroX.push(gyroX);
-                    data.gyroY.push(gyroY);
-                    data.gyroZ.push(gyroZ);
+                    data.gyroX.push(gyroX/1000.0);
+                    data.gyroY.push(gyroY/1000.0);
+                    data.gyroZ.push(gyroZ/1000.0);
                     
                     // 添加時間戳
                     data.timestamps.push(timestamp);
