@@ -323,6 +323,9 @@ setInterval(() => {
 
 // 解析串口數據
 function parseSerialData(text) {
+    // Log raw input text
+    console.log('Raw serial input:', text);
+    
     appendToSerialMonitor(text);
     
     // 將新數據添加到緩衝區
@@ -330,6 +333,7 @@ function parseSerialData(text) {
     
     // 檢查是否有完整的分割線（至少6個-）
     const hasSeparator = buffer.includes('------');
+    console.log('Has separator:', hasSeparator, 'Buffer length:', buffer.length);
     
     // 如果有分割線，則處理數據
     if (hasSeparator) {
@@ -337,62 +341,106 @@ function parseSerialData(text) {
         const groups = buffer.split(/------+/);
         
         // 最後一部分可能是不完整的，保留在緩衝區中
-        buffer = groups.pop();
+        buffer = groups.pop() || '';
+        console.log('Parsed groups:', groups, 'Remaining buffer:', buffer);
+        
+        // 緩衝區用於存儲5組數據
         const readingBuffer = [];
-                
+        
         // 處理每個完整的數據組
         for (const group of groups) {
-            // 更寬鬆的數據分割：支持換行、空格、逗號等多種分隔符
+            // 更寬鬆的數據分割：支持多種分隔符
             const values = group.split(/[\n\s,;]+/)
-                                .filter(item => item.trim() !== '')
-                                .map(item => parseFloat(item))
-                                .filter(num => !isNaN(num));
+                               .filter(item => item.trim() !== '')
+                               .map(item => {
+                                   // 提取數值，兼容 "Accel X:-96" 或 "X Accele:-96"
+                                   const match = item.match(/(?:Accel|Gyro)\s*[XYZ]:(?:-?\d+\.?\d*)/i);
+                                   return match ? parseFloat(match[0].split(':')[1]) : NaN;
+                               })
+                               .filter(num => !isNaN(num));
             
-            // 檢查是否有足夠的數據（至少6個數值）
+            console.log('Parsed values for group:', values);
+            
+            // 檢查是否有足夠的數據（6個數值：Accel X/Y/Z, Gyro X/Y/Z）
             if (values.length >= 6) {
                 try {
-                    // 只取前6個有效數值（寬鬆處理，不因格式問題丟棄數據）
+                    // 只取前6個有效數值
                     const [accelX, accelY, accelZ, gyroX, gyroY, gyroZ] = values.slice(0, 6);
-                    const timestamp = new Date().toLocaleTimeString();
+                    console.log('Valid group:', { accelX, accelY, accelZ, gyroX, gyroY, gyroZ });
                     
-                    // 更新加速度計數據
-                    // if(accelZ>0 && accelZ<200){
-                    //     accelZ+=1000;
-                    // }else if(accelZ<0 && accelZ>-200){
-                    //     accelZ-=1000;
-                    // }
-                    data.accelX.push(accelX*0.00980665);
-                    data.accelY.push(accelY*0.00980665);
-                    data.accelZ.push(accelZ*0.00980665);
+                    // 存儲到緩衝區
+                    readingBuffer.push({ accelX, accelY, accelZ, gyroX, gyroY, gyroZ });
                     
-                    // 更新陀螺儀數據
-                    data.gyroX.push(gyroX*0.001);
-                    data.gyroY.push(gyroY*0.001);
-                    data.gyroZ.push(gyroZ*0.001);
+                    console.log('Reading buffer size:', readingBuffer.length);
                     
-                    // 添加時間戳
-                    data.timestamps.push(timestamp);
-                    
-                    // 限制數據點數量
-                    if (data.accelX.length > MAX_DATA_POINTS) {
-                        data.accelX.shift();
-                        data.accelY.shift();
-                        data.accelZ.shift();
-                        data.gyroX.shift();
-                        data.gyroY.shift();
-                        data.gyroZ.shift();
-                        data.timestamps.shift();
+                    // 如果有5組數據，計算平均值並推送到圖表
+                    if (readingBuffer.length >= 5) {
+                        const timestamp = new Date().toLocaleTimeString();
+                        
+                        // 計算5組數據的平均值
+                        const avgAccelX = readingBuffer.reduce((sum, reading) => sum + reading.accelX, 0) / 5;
+                        const avgAccelY = readingBuffer.reduce((sum, reading) => sum + reading.accelY, 0) / 5;
+                        const avgAccelZ = readingBuffer.reduce((sum, reading) => sum + reading.accelZ, 0) / 5;
+                        const avgGyroX = readingBuffer.reduce((sum, reading) => sum + reading.gyroX, 0) / 5;
+                        const avgGyroY = readingBuffer.reduce((sum, reading) => sum + reading.gyroY, 0) / 5;
+                        const avgGyroZ = readingBuffer.reduce((sum, reading) => sum + reading.gyroZ, 0) / 5;
+                        
+                        // 轉換單位：加速度計（mg 轉 m/s²），陀螺儀（mdps 轉 dps）
+                        const avgAccelX_ms2 = avgAccelX * 0.00980665;
+                        const avgAccelY_ms2 = avgAccelY * 0.00980665;
+                        const avgAccelZ_ms2 = avgAccelZ * 0.00980665;
+                        const avgGyroX_dps = avgGyroX * 0.001;
+                        const avgGyroY_dps = avgGyroY * 0.001;
+                        const avgGyroZ_dps = avgGyroZ * 0.001;
+                        
+                        // 打印平均值到控制台
+                        console.log('Averaged Data:', {
+                            timestamp,
+                            accelX_ms2: avgAccelX_ms2.toFixed(4),
+                            accelY_ms2: avgAccelY_ms2.toFixed(4),
+                            accelZ_ms2: avgAccelZ_ms2.toFixed(4),
+                            gyroX_dps: avgGyroX_dps.toFixed(4),
+                            gyroY_dps: avgGyroY_dps.toFixed(4),
+                            gyroZ_dps: avgGyroZ_dps.toFixed(4)
+                        });
+                        
+                        // 更新加速度計數據
+                        data.accelX.push(avgAccelX_ms2);
+                        data.accelY.push(avgAccelY_ms2);
+                        data.accelZ.push(avgAccelZ_ms2);
+                        
+                        // 更新陀螺儀數據
+                        data.gyroX.push(avgGyroX_dps);
+                        data.gyroY.push(avgGyroY_dps);
+                        data.gyroZ.push(avgGyroZ_dps);
+                        
+                        // 添加時間戳
+                        data.timestamps.push(timestamp);
+                        
+                        // 限制數據點數量
+                        if (data.accelX.length > MAX_DATA_POINTS) {
+                            data.accelX.shift();
+                            data.accelY.shift();
+                            data.accelZ.shift();
+                            data.gyroX.shift();
+                            data.gyroY.shift();
+                            data.gyroZ.shift();
+                            data.timestamps.shift();
+                        }
+                        
+                        // 更新圖表
+                        updateCharts();
+                        updateCharts2();
+                        
+                        // 清空緩衝區以準備下一組5個數據
+                        readingBuffer.length = 0;
                     }
-                    
-                    // 更新圖表
-                    updateCharts();
-                    updateCharts2();
-                    
                 } catch (error) {
                     console.error('解析錯誤:', error, '組內容:', group);
                 }
+            } else {
+                console.log('Invalid group, insufficient values:', values);
             }
-            // 如果不足6個數據，則忽略這組數據
         }
     }
 }
