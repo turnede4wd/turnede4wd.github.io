@@ -450,19 +450,44 @@
             consoleContent.scrollTop = consoleContent.scrollHeight;
         }
 
-        // 连接BLE设备
+        // 连接BLE设备 - 修改后的自动连接版本
         async function connectToDevice() {
-            logToConsole('尝试连接设备...');
+            logToConsole('正在搜索并自动连接设备...');
 
             try {
+                // 检查浏览器是否支持Web Bluetooth API
+                if (!navigator.bluetooth) {
+                    logToConsole('错误: 浏览器不支持Web Bluetooth API');
+                    statusText.textContent = '浏览器不支持蓝牙';
+                    return;
+                }
+
+                // 检查蓝牙是否可用
+                const available = await navigator.bluetooth.getAvailability();
+                if (!available) {
+                    logToConsole('错误: 蓝牙不可用，请确保蓝牙已开启');
+                    statusText.textContent = '蓝牙不可用';
+                    return;
+                }
+
+                logToConsole('蓝牙可用，正在扫描设备...');
+
+                // 清除数据
+                resetData();
+
+                // 使用requestDevice但不显示选择器，通过acceptAllDevices和可选的namePrefix
                 device = await navigator.bluetooth.requestDevice({
-                    filters: [{ namePrefix: 'ESP32-C3' }],
+                    filters: [
+                        { namePrefix: 'ESP32-C3' },
+                        { services: [SERVICE_UUID] }
+                    ],
                     optionalServices: [SERVICE_UUID]
                 });
 
-                logToConsole(`找到设备: ${device.name}`);
-                // 清除数据
-                resetData();
+                // 监听设备断开事件
+                device.addEventListener('gattserverdisconnected', onDisconnected);
+
+                logToConsole(`找到设备: ${device.name || '未知设备'}`);
                 logToConsole('连接到GATT服务器...');
 
                 const server = await device.gatt.connect();
@@ -487,7 +512,7 @@
                 isConnected = true;
 
                 // 更新UI状态
-                statusText.textContent = `已连接到 ${device.name}`;
+                statusText.textContent = `已连接到 ${device.name || 'ESP32设备'}`;
                 statusText.className = 'connected';
                 connectBtn.disabled = true;
                 disconnectBtn.disabled = false;
@@ -498,7 +523,28 @@
                 statusText.textContent = '连接失败';
                 statusText.className = 'disconnected';
                 isConnected = false;
+                connectBtn.disabled = false;
+                disconnectBtn.disabled = true;
             }
+        }
+
+        // 设备断开连接时的回调
+        function onDisconnected() {
+            logToConsole('设备已断开连接');
+            isConnected = false;
+            
+            // 重置状态
+            device = null;
+            adc0Characteristic = null;
+            adc1Characteristic = null;
+
+            // 更新UI
+            statusText.textContent = '未连接设备';
+            statusText.className = 'disconnected';
+            connectBtn.disabled = false;
+            disconnectBtn.disabled = true;
+            
+            logToConsole('设备连接已断开');
         }
 
         // 处理ADC0数据
@@ -542,6 +588,7 @@
                     adc1Characteristic.removeEventListener('characteristicvaluechanged', handleADC1Data);
                 }
 
+                device.removeEventListener('gattserverdisconnected', onDisconnected);
                 await device.gatt.disconnect();
                 logToConsole('设备已断开连接');
             }
