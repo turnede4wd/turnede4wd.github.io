@@ -77,6 +77,13 @@
             transform: translateY(1px);
         }
 
+        button:disabled {
+            background: linear-gradient(45deg, #7f8c8d, #95a5a6);
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+        }
+
         #disconnectBtn {
             background: linear-gradient(45deg, #e74c3c, #c0392b);
         }
@@ -222,7 +229,7 @@
 
         <div class="controls">
             <button id="connectBtn">連接設備</button>
-            <button id="disconnectBtn">斷開連接</button>
+            <button id="disconnectBtn" disabled>斷開連接</button>
             <button id="toggleConsoleBtn">顯示控制台</button>
             <button id="clearConsoleBtn">清空控制台</button>
         </div>
@@ -259,66 +266,74 @@
     </div>
 
     <script>
-        // BLE UUIDs
-        const SERVICE_UUID = '4fafc201-1fb5-459e-8fcc-c5c9c331914b';
-        const CHAR_ADC0_UUID = '2b7e8251-2877-41c3-b46e-cf057c562023';
-        const CHAR_ADC1_UUID = '3b7e8251-2877-41c3-b46e-cf057c562023';
+        // 常量定义
+        const BLE_UUIDS = {
+            SERVICE: '4fafc201-1fb5-459e-8fcc-c5c9c331914b',
+            CHAR_ADC0: '2b7e8251-2877-41c3-b46e-cf057c562023',
+            CHAR_ADC1: '3b7e8251-2877-41c3-b46e-cf057c562023'
+        };
 
-        // DOM元素
-        const connectBtn = document.getElementById('connectBtn');
-        const disconnectBtn = document.getElementById('disconnectBtn');
-        const toggleConsoleBtn = document.getElementById('toggleConsoleBtn');
-        const clearConsoleBtn = document.getElementById('clearConsoleBtn');
-        const statusText = document.getElementById('statusText');
-        const consoleContent = document.getElementById('consoleContent');
-        const consoleContainer = document.querySelector('.console-container');
-        const consoleHeader = document.getElementById('consoleHeader');
-        const consoleStatus = document.getElementById('consoleStatus');
-        const adc0Value = document.querySelector('.adc0-value');
-        const adc1Value = document.querySelector('.adc1-value');
-        const adc0Time = document.getElementById('adc0Time');
-        const adc1Time = document.getElementById('adc1Time');
+        const MAX_DATA_POINTS = 300;
 
-        // 存储数据的数组（最多100个点）
-        let adc0Data = [];
-        let adc1Data = [];
-        const MAX_DATA_POINTS = 100;
+        // DOM元素引用
+        const DOM = {
+            connectBtn: document.getElementById('connectBtn'),
+            disconnectBtn: document.getElementById('disconnectBtn'),
+            toggleConsoleBtn: document.getElementById('toggleConsoleBtn'),
+            clearConsoleBtn: document.getElementById('clearConsoleBtn'),
+            statusText: document.getElementById('statusText'),
+            consoleContent: document.getElementById('consoleContent'),
+            consoleContainer: document.querySelector('.console-container'),
+            consoleHeader: document.getElementById('consoleHeader'),
+            consoleStatus: document.getElementById('consoleStatus'),
+            adc0Value: document.querySelector('.adc0-value'),
+            adc1Value: document.querySelector('.adc1-value'),
+            adc0Time: document.getElementById('adc0Time'),
+            adc1Time: document.getElementById('adc1Time')
+        };
 
-        // BLE相关变量
-        let device = null;
-        let adc0Characteristic = null;
-        let adc1Characteristic = null;
-        let isConnected = false;
+        // 应用状态
+        const AppState = {
+            // 修改数据结构，存储包含时间和电压值的对象
+            adc0Data: [],
+            adc1Data: [],
+            device: null,
+            adc0Characteristic: null,
+            adc1Characteristic: null,
+            isConnected: false,
+            voltageChart: null
+        };
 
-        // Chart.js实例
-        let voltageChart = null;
-
-        // 初始化图表（空图表）
+        // 初始化图表
         function initChart() {
             const ctx = document.getElementById('voltageChart').getContext('2d');
 
-            voltageChart = new Chart(ctx, {
+            AppState.voltageChart = new Chart(ctx, {
                 type: 'line',
                 data: {
                     labels: [],
                     datasets: [
                         {
-                            label: 'ADC0 电压',
+                            label: 'ADC0 電壓',
                             data: [],
                             borderColor: '#4facfe',
                             backgroundColor: 'rgba(79, 172, 254, 0.1)',
                             borderWidth: 2,
                             pointRadius: 0,
+                            pointHoverRadius: 6,
+                            pointHoverBackgroundColor: '#4facfe',
                             tension: 0.3,
                             fill: true
                         },
                         {
-                            label: 'ADC1 电压',
+                            label: 'ADC1 電壓',
                             data: [],
                             borderColor: '#00f2fe',
                             backgroundColor: 'rgba(0, 242, 254, 0.1)',
                             borderWidth: 2,
                             pointRadius: 0,
+                            pointHoverRadius: 6,
+                            pointHoverBackgroundColor: '#00f2fe',
                             tension: 0.3,
                             fill: true
                         }
@@ -330,13 +345,17 @@
                     animation: {
                         duration: 0
                     },
+                    interaction: {
+                        intersect: false,
+                        mode: 'index'
+                    },
                     scales: {
                         y: {
                             beginAtZero: true,
                             max: 3.5,
                             title: {
                                 display: true,
-                                text: '电压 (V)',
+                                text: '電壓 (V)',
                                 color: '#aaa'
                             },
                             grid: {
@@ -349,7 +368,7 @@
                         x: {
                             title: {
                                 display: true,
-                                text: '采样点',
+                                text: '采樣點',
                                 color: '#aaa'
                             },
                             grid: {
@@ -370,7 +389,33 @@
                             }
                         },
                         tooltip: {
-                            enabled: false
+                            enabled: true,
+                            backgroundColor: 'rgba(0, 0, 0, 0.7)',
+                            titleColor: '#fff',
+                            bodyColor: '#fff',
+                            borderColor: 'rgba(255, 255, 255, 0.2)',
+                            borderWidth: 1,
+                            displayColors: false,
+                            callbacks: {
+                                // 修改工具提示标题，显示采样时间
+                                title: function (context) {
+                                    const dataIndex = context[0].dataIndex;
+                                    const datasetIndex = context[0].datasetIndex;
+
+                                    let timestamp;
+                                    if (datasetIndex === 0) {
+                                        timestamp = AppState.adc0Data[dataIndex]?.timestamp || '';
+                                    } else {
+                                        timestamp = AppState.adc1Data[dataIndex]?.timestamp || '';
+                                    }
+
+                                    return `采樣時間: ${timestamp}`;
+                                },
+                                // 修改工具提示标签，显示电压值
+                                label: function (context) {
+                                    return `${context.dataset.label}: ${context.parsed.y.toFixed(3)}V`;
+                                }
+                            }
                         }
                     }
                 }
@@ -379,61 +424,69 @@
 
         // 更新图表数据
         function updateChart() {
-            if (voltageChart) {
-                voltageChart.data.datasets[0].data = adc0Data;
-                voltageChart.data.datasets[1].data = adc1Data;
+            if (AppState.voltageChart) {
+                // 提取电压值用于图表显示
+                const adc0Voltages = AppState.adc0Data.map(item => item.voltage);
+                const adc1Voltages = AppState.adc1Data.map(item => item.voltage);
 
-                // 仅在有数据时显示点
-                voltageChart.data.datasets[0].pointRadius = adc0Data.length > 0 ? 3 : 0;
-                voltageChart.data.datasets[1].pointRadius = adc1Data.length > 0 ? 3 : 0;
+                AppState.voltageChart.data.datasets[0].data = adc0Voltages;
+                AppState.voltageChart.data.datasets[1].data = adc1Voltages;
 
-                // 更新标签（仅显示最新10个标签）
+                // 更新标签
                 const labels = [];
-                for (let i = 0; i < Math.max(adc0Data.length, adc1Data.length); i++) {
+                for (let i = 0; i < Math.max(AppState.adc0Data.length, AppState.adc1Data.length); i++) {
                     labels.push(i + 1);
                 }
-                voltageChart.data.labels = labels;
+                AppState.voltageChart.data.labels = labels;
 
-                voltageChart.update();
+                AppState.voltageChart.update();
             }
         }
 
-        // 添加数据点（确保不超过最大数量）
+        // 添加数据点
         function addDataPoint(adc0, adc1) {
-            if (!isConnected) return;
+            if (!AppState.isConnected) return;
 
             const now = new Date();
             const timeString = now.toTimeString().split(' ')[0];
+            const fullTimeString = now.toLocaleTimeString();
 
-            // 添加新数据点
-            adc0Data.push(adc0);
-            adc1Data.push(adc1);
+            // 添加新数据点（包含电压和时间戳）
+            AppState.adc0Data.push({
+                voltage: adc0,
+                timestamp: fullTimeString
+            });
+
+            AppState.adc1Data.push({
+                voltage: adc1,
+                timestamp: fullTimeString
+            });
 
             // 更新显示值
-            adc0Value.textContent = adc0.toFixed(3) + " V";
-            adc1Value.textContent = adc1.toFixed(3) + " V";
-            adc0Time.textContent = timeString;
-            adc1Time.textContent = timeString;
+            DOM.adc0Value.textContent = adc0.toFixed(3) + " V";
+            DOM.adc1Value.textContent = adc1.toFixed(3) + " V";
+            DOM.adc0Time.textContent = timeString;
+            DOM.adc1Time.textContent = timeString;
 
-            // 保持数组长度不超过100
-            if (adc0Data.length > MAX_DATA_POINTS) {
-                adc0Data.shift();
+            // 保持数组长度不超过最大值
+            if (AppState.adc0Data.length > MAX_DATA_POINTS) {
+                AppState.adc0Data.shift();
             }
-            if (adc1Data.length > MAX_DATA_POINTS) {
-                adc1Data.shift();
+            if (AppState.adc1Data.length > MAX_DATA_POINTS) {
+                AppState.adc1Data.shift();
             }
 
             updateChart();
         }
 
-        // 重置图表和数据
+        // 重置数据
         function resetData() {
-            adc0Data = [];
-            adc1Data = [];
-            adc0Value.textContent = "--.-- V";
-            adc1Value.textContent = "--.-- V";
-            adc0Time.textContent = "--:--:--";
-            adc1Time.textContent = "--:--:--";
+            AppState.adc0Data = [];
+            AppState.adc1Data = [];
+            DOM.adc0Value.textContent = "--.-- V";
+            DOM.adc1Value.textContent = "--.-- V";
+            DOM.adc0Time.textContent = "--:--:--";
+            DOM.adc1Time.textContent = "--:--:--";
             updateChart();
         }
 
@@ -444,107 +497,60 @@
             const logLine = document.createElement('div');
             logLine.className = 'console-line';
             logLine.textContent = `[${timeString}] ${message}`;
-            consoleContent.appendChild(logLine);
+            DOM.consoleContent.appendChild(logLine);
 
             // 自动滚动到底部
-            consoleContent.scrollTop = consoleContent.scrollHeight;
+            DOM.consoleContent.scrollTop = DOM.consoleContent.scrollHeight;
         }
 
-        // 连接BLE设备 - 修改后的自动连接版本
+        // 连接BLE设备
         async function connectToDevice() {
-            logToConsole('正在搜索并自动连接设备...');
+            logToConsole('嘗試連接設備...');
 
             try {
-                // 检查浏览器是否支持Web Bluetooth API
-                if (!navigator.bluetooth) {
-                    logToConsole('错误: 浏览器不支持Web Bluetooth API');
-                    statusText.textContent = '浏览器不支持蓝牙';
-                    return;
-                }
-
-                // 检查蓝牙是否可用
-                const available = await navigator.bluetooth.getAvailability();
-                if (!available) {
-                    logToConsole('错误: 蓝牙不可用，请确保蓝牙已开启');
-                    statusText.textContent = '蓝牙不可用';
-                    return;
-                }
-
-                logToConsole('蓝牙可用，正在扫描设备...');
-
-                // 清除数据
-                resetData();
-
-                // 使用requestDevice但不显示选择器，通过acceptAllDevices和可选的namePrefix
-                device = await navigator.bluetooth.requestDevice({
-                    filters: [
-                        { namePrefix: 'ESP32-C3' },
-                        { services: [SERVICE_UUID] }
-                    ],
-                    optionalServices: [SERVICE_UUID]
+                AppState.device = await navigator.bluetooth.requestDevice({
+                    filters: [{ namePrefix: 'ESP32-C3' }],
+                    optionalServices: [BLE_UUIDS.SERVICE]
                 });
 
-                // 监听设备断开事件
-                device.addEventListener('gattserverdisconnected', onDisconnected);
+                logToConsole(`找到設備: ${AppState.device.name}`);
+                resetData();
+                logToConsole('連接到GATT服務器...');
 
-                logToConsole(`找到设备: ${device.name || '未知设备'}`);
-                logToConsole('连接到GATT服务器...');
+                const server = await AppState.device.gatt.connect();
+                logToConsole('GATT服務器已連接');
 
-                const server = await device.gatt.connect();
-                logToConsole('GATT服务器已连接');
-
-                const service = await server.getPrimaryService(SERVICE_UUID);
-                logToConsole('服务已获取');
+                const service = await server.getPrimaryService(BLE_UUIDS.SERVICE);
+                logToConsole('服務已獲取');
 
                 // 获取ADC0特征
-                adc0Characteristic = await service.getCharacteristic(CHAR_ADC0_UUID);
-                await adc0Characteristic.startNotifications();
-                adc0Characteristic.addEventListener('characteristicvaluechanged', handleADC0Data);
-                logToConsole('ADC0通知已启用');
+                AppState.adc0Characteristic = await service.getCharacteristic(BLE_UUIDS.CHAR_ADC0);
+                await AppState.adc0Characteristic.startNotifications();
+                AppState.adc0Characteristic.addEventListener('characteristicvaluechanged', handleADC0Data);
+                logToConsole('ADC0通知已啟用');
 
                 // 获取ADC1特征
-                adc1Characteristic = await service.getCharacteristic(CHAR_ADC1_UUID);
-                await adc1Characteristic.startNotifications();
-                adc1Characteristic.addEventListener('characteristicvaluechanged', handleADC1Data);
-                logToConsole('ADC1通知已启用');
+                AppState.adc1Characteristic = await service.getCharacteristic(BLE_UUIDS.CHAR_ADC1);
+                await AppState.adc1Characteristic.startNotifications();
+                AppState.adc1Characteristic.addEventListener('characteristicvaluechanged', handleADC1Data);
+                logToConsole('ADC1通知已啟用');
 
                 // 更新连接状态
-                isConnected = true;
+                AppState.isConnected = true;
 
                 // 更新UI状态
-                statusText.textContent = `已连接到 ${device.name || 'ESP32设备'}`;
-                statusText.className = 'connected';
-                connectBtn.disabled = true;
-                disconnectBtn.disabled = false;
+                DOM.statusText.textContent = `已連接到 ${AppState.device.name}`;
+                DOM.statusText.className = 'connected';
+                DOM.connectBtn.disabled = true;
+                DOM.disconnectBtn.disabled = false;
 
-                logToConsole('设备连接成功，开始接收数据...');
+                logToConsole('設備連接成功，開始接收數據...');
             } catch (error) {
-                logToConsole(`连接失败: ${error}`);
-                statusText.textContent = '连接失败';
-                statusText.className = 'disconnected';
-                isConnected = false;
-                connectBtn.disabled = false;
-                disconnectBtn.disabled = true;
+                logToConsole(`連接失敗: ${error}`);
+                DOM.statusText.textContent = '連接失敗';
+                DOM.statusText.className = 'disconnected';
+                AppState.isConnected = false;
             }
-        }
-
-        // 设备断开连接时的回调
-        function onDisconnected() {
-            logToConsole('设备已断开连接');
-            isConnected = false;
-            
-            // 重置状态
-            device = null;
-            adc0Characteristic = null;
-            adc1Characteristic = null;
-
-            // 更新UI
-            statusText.textContent = '未连接设备';
-            statusText.className = 'disconnected';
-            connectBtn.disabled = false;
-            disconnectBtn.disabled = true;
-            
-            logToConsole('设备连接已断开');
         }
 
         // 处理ADC0数据
@@ -554,9 +560,9 @@
             const voltage = parseFloat(decoder.decode(value));
 
             if (!isNaN(voltage)) {
-                logToConsole(`收到ADC0数据: ${voltage.toFixed(3)}V`);
+                logToConsole(`收到ADC0數據: ${voltage.toFixed(3)}V`);
                 // 获取ADC1的最新值（如果没有则为0）
-                const adc1Latest = adc1Data.length > 0 ? adc1Data[adc1Data.length - 1] : 0;
+                const adc1Latest = AppState.adc1Data.length > 0 ? AppState.adc1Data[AppState.adc1Data.length - 1].voltage : 0;
                 addDataPoint(voltage, adc1Latest);
             }
         }
@@ -568,55 +574,54 @@
             const voltage = parseFloat(decoder.decode(value));
 
             if (!isNaN(voltage)) {
-                logToConsole(`收到ADC1数据: ${voltage.toFixed(3)}V`);
+                logToConsole(`收到ADC1數據: ${voltage.toFixed(3)}V`);
                 // 获取ADC0的最新值（如果没有则为0）
-                const adc0Latest = adc0Data.length > 0 ? adc0Data[adc0Data.length - 1] : 0;
+                const adc0Latest = AppState.adc0Data.length > 0 ? AppState.adc0Data[AppState.adc0Data.length - 1].voltage : 0;
                 addDataPoint(adc0Latest, voltage);
             }
         }
 
         // 断开设备连接
         async function disconnectDevice() {
-            if (device && device.gatt.connected) {
-                if (adc0Characteristic) {
-                    await adc0Characteristic.stopNotifications();
-                    adc0Characteristic.removeEventListener('characteristicvaluechanged', handleADC0Data);
+            if (AppState.device && AppState.device.gatt.connected) {
+                if (AppState.adc0Characteristic) {
+                    await AppState.adc0Characteristic.stopNotifications();
+                    AppState.adc0Characteristic.removeEventListener('characteristicvaluechanged', handleADC0Data);
                 }
 
-                if (adc1Characteristic) {
-                    await adc1Characteristic.stopNotifications();
-                    adc1Characteristic.removeEventListener('characteristicvaluechanged', handleADC1Data);
+                if (AppState.adc1Characteristic) {
+                    await AppState.adc1Characteristic.stopNotifications();
+                    AppState.adc1Characteristic.removeEventListener('characteristicvaluechanged', handleADC1Data);
                 }
 
-                device.removeEventListener('gattserverdisconnected', onDisconnected);
-                await device.gatt.disconnect();
-                logToConsole('设备已断开连接');
+                await AppState.device.gatt.disconnect();
+                logToConsole('設備已斷開連接');
             }
 
             // 重置状态
-            isConnected = false;
-            device = null;
-            adc0Characteristic = null;
-            adc1Characteristic = null;
+            AppState.isConnected = false;
+            AppState.device = null;
+            AppState.adc0Characteristic = null;
+            AppState.adc1Characteristic = null;
 
             // 重置UI
-            statusText.textContent = '未连接设备';
-            statusText.className = 'disconnected';
-            connectBtn.disabled = false;
-            disconnectBtn.disabled = true;
+            DOM.statusText.textContent = '未連接設備';
+            DOM.statusText.className = 'disconnected';
+            DOM.connectBtn.disabled = false;
+            DOM.disconnectBtn.disabled = true;
         }
 
         // 切换控制台显示
         function toggleConsole() {
-            consoleContainer.classList.toggle('collapsed');
-            consoleStatus.textContent = consoleContainer.classList.contains('collapsed') ? '►' : '▼';
-            toggleConsoleBtn.textContent = consoleContainer.classList.contains('collapsed') ?
-                '显示控制台' : '隐藏控制台';
+            DOM.consoleContainer.classList.toggle('collapsed');
+            DOM.consoleStatus.textContent = DOM.consoleContainer.classList.contains('collapsed') ? '►' : '▼';
+            DOM.toggleConsoleBtn.textContent = DOM.consoleContainer.classList.contains('collapsed') ?
+                '顯示控制台' : '隱藏控制台';
         }
 
         // 清空控制台
         function clearConsole() {
-            consoleContent.innerHTML = '';
+            DOM.consoleContent.innerHTML = '';
             logToConsole('控制台已清空');
         }
 
@@ -626,21 +631,20 @@
             initChart();
 
             // 设置事件监听器
-            connectBtn.addEventListener('click', connectToDevice);
-            disconnectBtn.addEventListener('click', disconnectDevice);
-            toggleConsoleBtn.addEventListener('click', toggleConsole);
-            clearConsoleBtn.addEventListener('click', clearConsole);
-            consoleHeader.addEventListener('click', toggleConsole);
+            DOM.connectBtn.addEventListener('click', connectToDevice);
+            DOM.disconnectBtn.addEventListener('click', disconnectDevice);
+            DOM.toggleConsoleBtn.addEventListener('click', toggleConsole);
+            DOM.clearConsoleBtn.addEventListener('click', clearConsole);
+            DOM.consoleHeader.addEventListener('click', toggleConsole);
 
             // 初始状态
-            disconnectBtn.disabled = true;
-            isConnected = false;
+            AppState.isConnected = false;
 
             // 添加欢迎消息
-            logToConsole('系统已启动，点击"连接设备"按钮开始');
-            logToConsole('设备名称: ESP32-C3_ADC_Server');
-            logToConsole('ADC0 UUID: 2b7e8251-2877-41c3-b46e-cf057c562023');
-            logToConsole('ADC1 UUID: 3b7e8251-2877-41c3-b46e-cf057c562023');
+            logToConsole('系統已啟動，點擊"連接設備"按鈕開始');
+            logToConsole('設備名稱: ESP32-C3_ADC_Server');
+            logToConsole(`ADC0 UUID: ${BLE_UUIDS.CHAR_ADC0}`);
+            logToConsole(`ADC1 UUID: ${BLE_UUIDS.CHAR_ADC1}`);
         });
     </script>
 </body>
