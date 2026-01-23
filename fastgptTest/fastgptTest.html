@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>FastGPT Agent</title>
+    <style>
+        #chat-container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        #messages {
+            height: 400px;
+            overflow-y: auto;
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+
+        .message {
+            margin: 10px 0;
+            padding: 8px;
+            border-radius: 5px;
+        }
+
+        .user-message {
+            background-color: #e3f2fd;
+            text-align: right;
+        }
+
+        .bot-message {
+            background-color: #f5f5f5;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="chat-container">
+        <div id="messages"></div>
+        <div>
+            <input type="text" id="user-input" placeholder="输入您的问题..." style="width: 80%; padding: 10px;">
+            <button id="send-btn" style="padding: 10px 20px;">发送</button>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'https://api.fastgpt.in/api'; // 替换为你的API地址
+        const API_KEY = 'fastgpt-kFO2TbPdFhZPdBZNrg8gCDBiY9bBI43QZzaxpjYn8eGO6UhqfaorYfV2leJ'; // 你的API密钥
+
+        async function sendMessage() {
+            const input = document.getElementById('user-input');
+            const message = input.value.trim();
+
+            if (!message) return;
+
+            // 显示用户消息
+            displayMessage(message, 'user');
+            input.value = '';
+
+            try {
+                // 调用FastGPT API
+                const response = await fetch(`${API_URL}/chat/completions`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${API_KEY}`
+                    },
+                    body: JSON.stringify({
+                        model: "fastgpt-model", // 你的模型名称
+                        messages: [
+                            {
+                                role: "user",
+                                content: message
+                            }
+                        ],
+                        stream: false // 或 true 用于流式响应
+                    })
+                });
+
+                const data = await response.json();
+
+                // 显示AI回复
+                if (data.choices && data.choices[0]) {
+                    displayMessage(data.choices[0].message.content, 'bot');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                displayMessage('抱歉，出现了错误。', 'bot');
+            }
+        }
+
+        function displayMessage(content, sender) {
+            const messagesDiv = document.getElementById('messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${sender}-message`;
+            messageDiv.textContent = content;
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        // 事件监听
+        document.getElementById('send-btn').addEventListener('click', sendMessage);
+        document.getElementById('user-input').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
+    </script>
+</body>
+
+</html>
