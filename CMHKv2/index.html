@@ -350,6 +350,25 @@
             padding: 40px 15px;
         }
 
+        /* 雙日志區域容器 */
+        .dual-log-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .log-section-wrapper {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .log-section-title {
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #000;
+        }
+
         /* 傳感器配置頁面樣式 */
         .sensor-config-section {
             margin-bottom: 30px;
@@ -664,6 +683,68 @@
         /* 當只有一個列時 */
         .settings-row .settings-col:only-child {
             grid-column: 1;
+        }
+
+        /* WiFi回復消息樣式 */
+        .wifi-response-box {
+            margin-top: 15px;
+            padding: 12px;
+            border-radius: 4px;
+            display: none;
+            font-size: 14px;
+        }
+
+        .wifi-response-box.show {
+            display: block;
+        }
+
+        .wifi-response-box.success {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+
+        .wifi-response-box.error {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+
+        .wifi-response-box.info {
+            background-color: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+        }
+
+        /* OneNET回復消息樣式 */
+        .onenet-response-box {
+            margin-top: 15px;
+            padding: 12px;
+            border-radius: 4px;
+            display: none;
+            font-size: 14px;
+        }
+
+        .onenet-response-box.show {
+            display: block;
+        }
+
+        .onenet-response-box.success {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+
+        .onenet-response-box.error {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+
+        .onenet-response-box.info {
+            background-color: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
         }
 
         /* 重置設置樣式 */
@@ -1143,7 +1224,39 @@
         </div>
         <div id="settings" class="page">
             <h1>基本設置</h1>
-            <p>設置oneNET平台的device ID, product name, product key, userID, user accesskey等。</p>
+
+            <!-- WiFi設置區域 -->
+            <div class="settings-section">
+                <h2>WiFi</h2>
+                <div class="settings-row">
+                    <div class="settings-col">
+                        <div class="form-group">
+                            <label for="wifiSSID">SSID <span class="required-mark">*</span></label>
+                            <input type="text" id="wifiSSID" placeholder="輸入WiFi SSID">
+                            <div class="error-message" id="wifiSSIDError"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="settings-row">
+                    <div class="settings-col">
+                        <div class="form-group">
+                            <label for="wifiPassword">Password <span class="required-mark">*</span></label>
+                            <input type="password" id="wifiPassword" placeholder="輸入WiFi密碼">
+                            <div class="error-message" id="wifiPasswordError"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 10px;">
+                    <button class="btn-confirm" onclick="saveWiFiSettings()">確定</button>
+                    <button class="btn-confirm" onclick="connectWiFi()" style="background-color: #17a2b8;">連接</button>
+                    <button class="btn-cancel" onclick="clearWiFiSettings()">清除設置</button>
+                </div>
+                <div class="wifi-response-box" id="wifiResponseBox">
+                    <!-- WiFi回復信息将在這裡顯示 -->
+                </div>
+            </div>
 
             <!-- OneNET設置區域 -->
             <div class="settings-section">
@@ -1203,7 +1316,8 @@
                 </div>
 
                 <div style="display: flex; gap: 10px;">
-                    <button class="btn-confirm" onclick="saveOneNETSettings()">保存設置</button>
+                    <button class="btn-confirm" onclick="saveOneNETSettings()">確定</button>
+                    <button class="btn-confirm" onclick="connectOneNET()" style="background-color: #17a2b8;">連接</button>
                     <button class="btn-cancel" onclick="clearOneNETSettings()">清除設置</button>
                 </div>
                 <div class="onenet-response-box" id="onenetResponseBox">
@@ -1230,8 +1344,19 @@
                         <input type="checkbox" id="autoScrollCheckbox" checked onchange="toggleAutoScroll()"> 自動滾動
                     </label>
                 </div>
-                <div class="log-display" id="logDisplay">
-                    <div class="no-log">等待連接設備並接收數據...</div>
+                <div class="dual-log-container">
+                    <div class="log-section-wrapper">
+                        <div class="log-section-title">傳感器日志</div>
+                        <div class="log-display" id="logDisplay">
+                            <div class="no-log">等待連接設備並接收數據...</div>
+                        </div>
+                    </div>
+                    <div class="log-section-wrapper">
+                        <div class="log-section-title">軟串口日志 [soft]</div>
+                        <div class="log-display" id="softLogDisplay">
+                            <div class="no-log">等待連接設備並接收數據...</div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1275,6 +1400,12 @@
         // 連接設備（使用 Web Bluetooth，基於 NUS-like TX/RX）
         async function connectDevice() {
             try {
+                // 如果已連接，先斷開舊連接
+                if (deviceConnected || bleDevice) {
+                    await disconnectDevice();
+                    await new Promise(resolve => setTimeout(resolve, 500)); // 等待 500ms 釋放資源
+                }
+
                 addSerialLog('系統: 嘗試通過藍牙連接設備...', 'system');
 
                 bleDevice = await navigator.bluetooth.requestDevice({
@@ -1283,6 +1414,15 @@
                 });
 
                 const server = await bleDevice.gatt.connect();
+
+                // 等待 GATT 服務器完全初始化
+                await new Promise(resolve => setTimeout(resolve, 300));
+
+                // 確保連接仍然有效
+                if (!bleDevice.gatt.connected) {
+                    throw new Error('GATT 連接在初始化期間斷開');
+                }
+
                 const service = await server.getPrimaryService(BLE_SERVICE_UUID);
 
                 // 獲取 RX (write) 和 TX (notify) 特徵
@@ -1302,9 +1442,18 @@
                 }
 
                 if (txCharacteristic) {
-                    await txCharacteristic.startNotifications();
+                    // 先綁定事件監聽器，再啟動通知
                     txCharacteristic.addEventListener('characteristicvaluechanged', handleBLENotification);
+                    console.log('已綁定 characteristicvaluechanged 事件監聽器');
+
+                    // 同時使用 oncharacteristicvaluechanged 屬性作為備份
+                    txCharacteristic.oncharacteristicvaluechanged = handleBLENotification;
+                    console.log('已設置 oncharacteristicvaluechanged 屬性');
+
+                    await txCharacteristic.startNotifications();
+                    console.log('已啟動 TX 特徵通知');
                     addSerialLog('系統: TX 通知已啟用', 'system');
+                    addSerialLog('系統: 等待設備數據...', 'system');
                 }
 
                 // 設置斷開事件監聽
@@ -1326,53 +1475,151 @@
         // 處理藍牙通知數據
         function handleBLENotification(event) {
             try {
+                console.log('✓ BLE通知事件已觸發', event);
                 const value = event.target.value;
+                console.log('原始數據（DataView）:', value);
+                console.log('數據長度:', value.byteLength);
+
                 const decoder = new TextDecoder();
                 const dataChunk = decoder.decode(value);
-                // 添加到緩衝區並按行解析（同串口）
-                serialReceiveBuffer += dataChunk;
-                const lines = serialReceiveBuffer.split(/\r\n|\r|\n/);
-                serialReceiveBuffer = lines.pop() || '';
+                console.log('解碼後的數據:', JSON.stringify(dataChunk));
+                console.log('解碼後的數據長度:', dataChunk.length);
 
-                for (const line of lines) {
-                    if (line.trim()) {
-                        addSerialLog(line, 'receive');
-                        handleGPIOConfirmation(line);
-                        handleDHT11Confirmation(line);
-                        processSensorData(line);
+                // 添加到緩衝區
+                serialReceiveBuffer += dataChunk;
+                console.log('當前緩衝區內容:', JSON.stringify(serialReceiveBuffer));
+
+                // 處理緩衝區中的完整消息（以 $ 標志作為分割符）
+                let processedMessages = 0;
+                while (true) {
+                    // 查找 $
+                    const messageStartIndex = serialReceiveBuffer.indexOf('$');
+
+                    if (messageStartIndex === -1) {
+                        // 沒有找到 $，等待更多數據
+                        console.log('沒有找到 $ 標志，等待更多數據');
+                        break;
                     }
+
+                    if (messageStartIndex > 0) {
+                        // 丟棄 $ 前的垃圾數據
+                        console.log('丟棄垃圾數據:', JSON.stringify(serialReceiveBuffer.substring(0, messageStartIndex)));
+                        serialReceiveBuffer = serialReceiveBuffer.substring(messageStartIndex);
+                    }
+
+                    // 查找下一個 $ 或換行符作為消息結尾
+                    let nextDelimiterIndex = -1;
+                    let nextDelimiterType = ''; // 'dollar' 或 'newline'
+
+                    const nextDollarIndex = serialReceiveBuffer.indexOf('$', 1);
+                    const crlfIndex = serialReceiveBuffer.indexOf('\r\n', 1);
+                    const lfIndex = serialReceiveBuffer.indexOf('\n', 1);
+                    const crIndex = serialReceiveBuffer.indexOf('\r', 1);
+
+                    // 找到最近的分割點
+                    const delimiters = [];
+                    if (nextDollarIndex !== -1) delimiters.push({ index: nextDollarIndex, type: 'dollar' });
+                    if (crlfIndex !== -1) delimiters.push({ index: crlfIndex, type: 'crlf' });
+                    if (lfIndex !== -1 && lfIndex !== crlfIndex) delimiters.push({ index: lfIndex, type: 'lf' });
+                    if (crIndex !== -1 && crIndex !== crlfIndex) delimiters.push({ index: crIndex, type: 'cr' });
+
+                    if (delimiters.length === 0) {
+                        // 沒有找到消息結尾，等待更多數據
+                        console.log('沒有找到消息結尾，等待更多數據');
+                        break;
+                    }
+
+                    // 選擇最近的分割點
+                    delimiters.sort((a, b) => a.index - b.index);
+                    const delimiter = delimiters[0];
+                    nextDelimiterIndex = delimiter.index;
+                    nextDelimiterType = delimiter.type;
+
+                    // 提取完整的消息（不包括 $ 和結尾符）
+                    let message = serialReceiveBuffer.substring(1, nextDelimiterIndex).trim();
+
+                    // 計算要移除的字符數
+                    let moveForwardLength = nextDelimiterIndex;
+                    if (nextDelimiterType === 'crlf') {
+                        moveForwardLength += 2;
+                    } else if (nextDelimiterType === 'lf' || nextDelimiterType === 'cr') {
+                        moveForwardLength += 1;
+                    } else if (nextDelimiterType === 'dollar') {
+                        moveForwardLength += 1;
+                    }
+
+                    serialReceiveBuffer = serialReceiveBuffer.substring(moveForwardLength);
+
+                    if (message.length > 0) {
+                        console.log('處理消息 [' + processedMessages + ']:', message);
+                        addSerialLog(message, 'receive');
+                        handleGPIOConfirmation(message);
+                        handleDHT11Confirmation(message);
+                        processSensorData(message);
+                        processedMessages++;
+                    }
+                }
+
+                if (processedMessages > 0) {
+                    console.log('本次通知共處理了 ' + processedMessages + ' 條消息');
                 }
             } catch (e) {
                 console.error('處理BLE通知失敗:', e);
+                console.error('錯誤堆棧:', e.stack);
+                addSerialLog('錯誤: 處理BLE通知失敗 - ' + e.message, 'error');
             }
         }
 
         // 斷開藍牙連接
         async function disconnectDevice() {
             try {
+                // 停止接收通知（TX characteristic）
                 if (txCharacteristic) {
                     try {
                         await txCharacteristic.stopNotifications();
                         txCharacteristic.removeEventListener('characteristicvaluechanged', handleBLENotification);
                     } catch (e) {
+                        console.error('停止 TX 通知失敗:', e);
+                    }
+                }
+
+                // 斷開 GATT 連接
+                if (bleDevice && bleDevice.gatt && bleDevice.gatt.connected) {
+                    try {
+                        await bleDevice.gatt.disconnect();
+                        console.log('GATT 連接已斷開');
+                    } catch (e) {
+                        console.error('GATT 斷開失敗:', e);
+                    }
+                }
+
+                // 移除斷開連接監聽器
+                if (bleDevice) {
+                    try {
+                        bleDevice.removeEventListener('gattserverdisconnected', handleBLEDisconnect);
+                    } catch (e) {
                         // ignore
                     }
                 }
 
-                if (bleDevice && bleDevice.gatt && bleDevice.gatt.connected) {
-                    bleDevice.gatt.disconnect();
-                }
-
+                // 重置所有狀態
                 deviceConnected = false;
                 bleDevice = null;
                 txCharacteristic = null;
                 rxCharacteristic = null;
                 serialReceiveBuffer = '';
+
                 addSerialLog('系統: 設備已斷開連接', 'system');
                 updateConnectButton();
             } catch (error) {
                 console.error('斷開藍牙失敗:', error);
                 addSerialLog('錯誤: ' + error.message, 'error');
+                // 確保狀態被重置
+                deviceConnected = false;
+                bleDevice = null;
+                txCharacteristic = null;
+                rxCharacteristic = null;
+                updateConnectButton();
             }
         }
 
@@ -1394,7 +1641,8 @@
         function processSensorData(data) {
             try {
                 // 匹配格式: [sensor][sensorName][unit]=value
-                const match = data.match(/\[sensor\]\[([^\]]+)\]\[([^\]]+)\]=([\d\.-]+)/);
+                // 改進的正則表達式，支持更多浮點數格式
+                const match = data.match(/\[sensor\]\[([^\]]+)\]\[([^\]]+)\]=(-?[\d.]+(?:[eE][+-]?\d+)?)/);
                 if (!match) {
                     console.log('非傳感器數據或格式不匹配:', data);
                     return;
@@ -1403,6 +1651,8 @@
                 const sensorName = match[1]; // 例如: 'ax', 'ay', 'az', 'gx', 'gy', 'gz', 'g'
                 const unit = match[2];       // 例如: 'g', 'dps', 'm/s²'
                 const value = parseFloat(match[3]); // 數值
+
+                console.log('傳感器數據已解析: 名稱=' + sensorName + ', 單位=' + unit + ', 值=' + value);
 
                 // 初始化傳感器數據（如果不存在）
                 if (!sensorDataMap[sensorName]) {
@@ -1880,16 +2130,35 @@
         }
 
         // 監聽 BLE 斷開事件
+        // BLE 自動斷開連接事件處理器
+        function handleBLEDisconnect() {
+            if (deviceConnected) {
+                deviceConnected = false;
+                updateConnectButton();
+                addSerialLog('系統: 設備已物理斷開連接', 'system');
+                console.log('設備已物理斷開連接');
+
+                // 清理資源
+                txCharacteristic = null;
+                rxCharacteristic = null;
+                serialReceiveBuffer = '';
+            }
+        }
+
+        // 設置 BLE 斷開連接事件監聽
         function setupBLEDisconnectHandler() {
             if (!bleDevice) return;
-            bleDevice.addEventListener('gattserverdisconnected', () => {
-                if (deviceConnected) {
-                    deviceConnected = false;
-                    updateConnectButton();
-                    addSerialLog('系統: 設備已物理斷開連接', 'system');
-                    console.log('設備已斷開連接');
-                }
-            });
+
+            // 移除舊的監聽器（防止重複）
+            try {
+                bleDevice.removeEventListener('gattserverdisconnected', handleBLEDisconnect);
+            } catch (e) {
+                // ignore
+            }
+
+            // 添加新的監聽器
+            bleDevice.addEventListener('gattserverdisconnected', handleBLEDisconnect);
+            console.log('BLE 斷開連接監聽已設置');
         }
 
         // 頁面加載時初始化
@@ -1954,24 +2223,48 @@
         // 更新串口日志顯示
         function updateSerialLogDisplay() {
             const logDisplay = document.getElementById('logDisplay');
+            const softLogDisplay = document.getElementById('softLogDisplay');
 
-            if (serialLogHistory.length === 0) {
+            // 分離軟串口日志和傳感器日志
+            const softLogs = serialLogHistory.filter(entry => entry.message.includes('[soft]'));
+            const sensorLogs = serialLogHistory.filter(entry => !entry.message.includes('[soft]'));
+
+            // 更新傳感器日志顯示
+            if (sensorLogs.length === 0) {
                 logDisplay.innerHTML = '<div class="no-log">等待連接設備並接收數據...</div>';
-                return;
+            } else {
+                logDisplay.innerHTML = sensorLogs.map(entry => {
+                    // 將換行符(\n)和回車符(\r)轉換為HTML的<br>標籤
+                    const messageWithLineBreaks = escapeHtml(entry.message)
+                        .replace(/\r\n/g, '<br>')
+                        .replace(/\r/g, '<br>')
+                        .replace(/\n/g, '<br>');
+                    return `<div class="log-entry ${entry.type}"><span class="log-timestamp">[${entry.timestamp}]</span>${messageWithLineBreaks}</div>`;
+                }).join('');
+
+                // 自動滾動到底部
+                if (autoScroll) {
+                    logDisplay.scrollTop = logDisplay.scrollHeight;
+                }
             }
 
-            logDisplay.innerHTML = serialLogHistory.map(entry => {
-                // 將換行符(\n)和回車符(\r)轉換為HTML的<br>標籤
-                const messageWithLineBreaks = escapeHtml(entry.message)
-                    .replace(/\r\n/g, '<br>')
-                    .replace(/\r/g, '<br>')
-                    .replace(/\n/g, '<br>');
-                return `<div class="log-entry ${entry.type}"><span class="log-timestamp">[${entry.timestamp}]</span>${messageWithLineBreaks}</div>`;
-            }).join('');
+            // 更新軟串口日志顯示
+            if (softLogs.length === 0) {
+                softLogDisplay.innerHTML = '<div class="no-log">等待連接設備並接收數據...</div>';
+            } else {
+                softLogDisplay.innerHTML = softLogs.map(entry => {
+                    // 將換行符(\n)和回車符(\r)轉換為HTML的<br>標籤
+                    const messageWithLineBreaks = escapeHtml(entry.message)
+                        .replace(/\r\n/g, '<br>')
+                        .replace(/\r/g, '<br>')
+                        .replace(/\n/g, '<br>');
+                    return `<div class="log-entry ${entry.type}"><span class="log-timestamp">[${entry.timestamp}]</span>${messageWithLineBreaks}</div>`;
+                }).join('');
 
-            // 自動滾動到底部
-            if (autoScroll) {
-                logDisplay.scrollTop = logDisplay.scrollHeight;
+                // 自動滾動到底部
+                if (autoScroll) {
+                    softLogDisplay.scrollTop = softLogDisplay.scrollHeight;
+                }
             }
         }
 
@@ -2022,7 +2315,9 @@
             autoScroll = document.getElementById('autoScrollCheckbox').checked;
             if (autoScroll) {
                 const logDisplay = document.getElementById('logDisplay');
+                const softLogDisplay = document.getElementById('softLogDisplay');
                 logDisplay.scrollTop = logDisplay.scrollHeight;
+                softLogDisplay.scrollTop = softLogDisplay.scrollHeight;
             }
         }
 
@@ -2520,6 +2815,130 @@
 
         // ==================== 重置設置功能 ====================
 
+        // ==================== WiFi 設置功能 ====================
+
+        // 顯示WiFi設置回復消息
+        function showWiFiResponse(message, type = 'info') {
+            const responseBox = document.getElementById('wifiResponseBox');
+            responseBox.textContent = message;
+            responseBox.className = `wifi-response-box show ${type}`;
+            if (type === 'error') {
+                setTimeout(() => {
+                    responseBox.classList.remove('show');
+                }, 10000);
+            }
+        }
+
+        // 清除WiFi輸入框中的錯誤提示
+        function clearWiFiErrors() {
+            document.getElementById('wifiSSIDError').textContent = '';
+            document.getElementById('wifiPasswordError').textContent = '';
+        }
+
+        // 通過藍牙發送WiFi設置命令
+        async function sendWiFiCommand(ssid, password) {
+            if (!deviceConnected || !rxCharacteristic) {
+                showWiFiResponse('請先連接設備', 'error');
+                return false;
+            }
+
+            try {
+                const encoder = new TextEncoder();
+
+                // 發送SSID命令: [set][SSID]=*ssid*
+                const ssidCommand = `[set][SSID]=${ssid}`;
+                await rxCharacteristic.writeValue(encoder.encode(ssidCommand + '\n'));
+                addSerialLog(`發送WiFi SSID命令: ${ssidCommand}`, 'send');
+
+                // 等待一小段時間再發送密碼
+                await new Promise(resolve => setTimeout(resolve, 100));
+
+                // 發送密碼命令: [set][PW]=*password*
+                const pwCommand = `[set][PW]=${password}`;
+                await rxCharacteristic.writeValue(encoder.encode(pwCommand + '\n'));
+                addSerialLog(`發送WiFi密碼命令: ${pwCommand}`, 'send');
+
+                return true;
+            } catch (error) {
+                console.error('發送WiFi命令失敗:', error);
+                addSerialLog('錯誤: 發送WiFi命令失敗 - ' + error.message, 'error');
+                return false;
+            }
+        }
+
+        // 保存WiFi設置
+        async function saveWiFiSettings() {
+            clearWiFiErrors();
+
+            const ssid = document.getElementById('wifiSSID').value.trim();
+            const password = document.getElementById('wifiPassword').value.trim();
+
+            let hasError = false;
+
+            // 驗證SSID
+            if (!ssid) {
+                document.getElementById('wifiSSIDError').textContent = '請輸入WiFi SSID';
+                hasError = true;
+            }
+
+            // 驗證密碼
+            if (!password) {
+                document.getElementById('wifiPasswordError').textContent = '請輸入WiFi密碼';
+                hasError = true;
+            }
+
+            if (hasError) {
+                showWiFiResponse('請填寫所有必填字段', 'error');
+                return;
+            }
+
+            // 通過藍牙發送命令
+            const success = await sendWiFiCommand(ssid, password);
+
+            if (success) {
+                // 保存到本地存儲
+                const wifiConfig = {
+                    ssid: ssid,
+                    password: password,
+                    timestamp: new Date().toISOString()
+                };
+                localStorage.setItem('wifiConfig', JSON.stringify(wifiConfig));
+                showWiFiResponse('WiFi 設置已發送並保存', 'success');
+            } else {
+                showWiFiResponse('WiFi 設置發送失敗，請檢查設備連接', 'error');
+            }
+        }
+
+        // 清除WiFi設置
+        function clearWiFiSettings() {
+            document.getElementById('wifiSSID').value = '';
+            document.getElementById('wifiPassword').value = '';
+            clearWiFiErrors();
+            localStorage.removeItem('wifiConfig');
+            showWiFiResponse('WiFi 設置已清除', 'info');
+            addSerialLog('WiFi 設置已清除 (本地)', 'system');
+        }
+
+        // 連接WiFi
+        async function connectWiFi() {
+            if (!deviceConnected || !rxCharacteristic) {
+                showWiFiResponse('請先連接設備', 'error');
+                return;
+            }
+
+            try {
+                const encoder = new TextEncoder();
+                const command = '[conn][wifi]=5';
+                await rxCharacteristic.writeValue(encoder.encode(command + '\n'));
+                addSerialLog(`發送WiFi連接命令: ${command}`, 'send');
+                showWiFiResponse('WiFi 連接命令已發送', 'success');
+            } catch (error) {
+                console.error('發送WiFi連接命令失敗:', error);
+                addSerialLog('錯誤: 發送WiFi連接命令失敗 - ' + error.message, 'error');
+                showWiFiResponse('WiFi 連接命令發送失敗', 'error');
+            }
+        }
+
         // 保存WiFi設置
 
         // OneNET 連接功能已移除。保留輸入框和本地保存功能（不發起網絡請求）。
@@ -2535,7 +2954,7 @@
         }
 
         // 保存 OneNET 設置到本地（不嘗試連接）
-        function saveOneNETSettings() {
+        async function saveOneNETSettings() {
             const userID = document.getElementById('userID').value.trim();
             const userAccessKey = document.getElementById('userAccessKey').value.trim();
             const productID = document.getElementById('productID').value.trim();
@@ -2554,12 +2973,71 @@
                 return;
             }
 
+            // 嘗試通過藍牙發送OneNET設置命令
+            let sentViaBluetoooth = false;
+            if (deviceConnected && rxCharacteristic) {
+                try {
+                    const encoder = new TextEncoder();
+
+                    // 發送Product ID命令: [set][PID]=*product id*
+                    const pidCommand = `[set][PID]=${productID}`;
+                    await rxCharacteristic.writeValue(encoder.encode(pidCommand + '\n'));
+                    addSerialLog(`發送OneNET Product ID命令: ${pidCommand}`, 'send');
+
+                    // 等待一小段時間
+                    await new Promise(resolve => setTimeout(resolve, 100));
+
+                    // 發送Device Name命令: [set][DID]=*device name*
+                    const didCommand = `[set][DID]=${deviceName}`;
+                    await rxCharacteristic.writeValue(encoder.encode(didCommand + '\n'));
+                    addSerialLog(`發送OneNET Device Name命令: ${didCommand}`, 'send');
+
+                    // 等待一小段時間
+                    await new Promise(resolve => setTimeout(resolve, 100));
+
+                    // 發送Device Key命令: [set][DPW]=*device key*
+                    const dpwCommand = `[set][DPW]=${deviceKey}`;
+                    await rxCharacteristic.writeValue(encoder.encode(dpwCommand + '\n'));
+                    addSerialLog(`發送OneNET Device Key命令: ${dpwCommand}`, 'send');
+
+                    sentViaBluetoooth = true;
+                } catch (error) {
+                    console.error('通過藍牙發送OneNET設置失敗:', error);
+                    addSerialLog('警告: 通過藍牙發送OneNET設置失敗 - ' + error.message, 'error');
+                }
+            }
+
             const oneNetConfig = {
                 userID, userAccessKey, productID, deviceName, deviceKey, timestamp: new Date().toISOString()
             };
             localStorage.setItem('oneNetConfig', JSON.stringify(oneNetConfig));
-            showOneNETResponse('OneNET 設置已保存 (未啟用連接功能)', 'success');
+
+            if (sentViaBluetoooth) {
+                showOneNETResponse('OneNET 設置已保存並通過藍牙發送到設備', 'success');
+            } else {
+                showOneNETResponse('OneNET 設置已保存 (未能發送到設備，請檢查設備連接)', 'success');
+            }
             addSerialLog('OneNET 設置已保存 (本地)', 'system');
+        }
+
+        // 連接OneNET
+        async function connectOneNET() {
+            if (!deviceConnected || !rxCharacteristic) {
+                showOneNETResponse('請先連接設備', 'error');
+                return;
+            }
+
+            try {
+                const encoder = new TextEncoder();
+                const command = '[conn][onenet]';
+                await rxCharacteristic.writeValue(encoder.encode(command + '\n'));
+                addSerialLog(`發送OneNET連接命令: ${command}`, 'send');
+                showOneNETResponse('OneNET 連接命令已發送', 'success');
+            } catch (error) {
+                console.error('發送OneNET連接命令失敗:', error);
+                addSerialLog('錯誤: 發送OneNET連接命令失敗 - ' + error.message, 'error');
+                showOneNETResponse('OneNET 連接命令發送失敗', 'error');
+            }
         }
 
         // 清除本地保存的 OneNET 設置（僅本地操作）
@@ -2578,6 +3056,18 @@
 
         // 加載已保存的設置
         function loadSavedSettings() {
+            // 加載WiFi設置
+            const savedWiFiConfig = localStorage.getItem('wifiConfig');
+            if (savedWiFiConfig) {
+                try {
+                    const wifiConfig = JSON.parse(savedWiFiConfig);
+                    document.getElementById('wifiSSID').value = wifiConfig.ssid || '';
+                    document.getElementById('wifiPassword').value = wifiConfig.password || '';
+                } catch (e) {
+                    console.error('Failed to load WiFi config:', e);
+                }
+            }
+
             // 加載OneNET設置
             const savedOneNetConfig = localStorage.getItem('oneNetConfig');
             if (savedOneNetConfig) {
