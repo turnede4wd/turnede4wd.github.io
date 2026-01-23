@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CMHKv2 Web</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
     <style>
         body {
             font-family: 'Arial', sans-serif;
@@ -2546,35 +2547,39 @@
             }
         }
 
-        // 計算OneNET Token - 使用後端API（推薦方式）
-        async function calculateOneNETToken(productId, deviceName, deviceKey) {
+        // 計算OneNET Token - 客戶端實現
+        function calculateOneNETToken(productId, deviceName, deviceKey) {
             try {
-                console.log('[前端Token計算] 呼叫後端API計算Token');
+                console.log('[前端Token計算] 開始計算Token');
 
-                const response = await fetch('http://localhost:3000/api/onenet/token', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        productId: productId,
-                        deviceName: deviceName,
-                        deviceKey: deviceKey
-                    })
-                });
+                const version = '2018-10-31';
+                // 簽名字符串中的資源名
+                const res = `products/${productId}/devices/${deviceName}`;
+                // Token中的資源名（URL編碼）
+                const res1 = `products%2F${productId}%2Fdevices%2F${deviceName}`;
 
-                if (!response.ok) {
-                    throw new Error(`後端返回錯誤: ${response.status}`);
-                }
+                const timestamp = Math.floor(Date.now() / 1000);
+                const et = String(timestamp + 5 * 60); // 5分鐘有效期
+                const method = 'md5'; // 必須是MD5
 
-                const result = await response.json();
+                // 簽名字符串格式：et + method + res + version
+                const signString = `${et}\n${method}\n${res}\n${version}`;
 
-                if (result.success && result.token) {
-                    console.log('[前端Token計算] 成功取得Token');
-                    return result.token;
-                } else {
-                    throw new Error(result.message || '後端計算Token失敗');
-                }
+                console.log('[前端Token計算] 簽名字符串:', signString);
+                console.log('[前端Token計算] Device Key (Base64):', deviceKey);
+
+                // 使用CryptoJS計算HMAC-MD5
+                const key = CryptoJS.enc.Base64.parse(deviceKey);
+                const signBytes = CryptoJS.HmacMD5(signString, key);
+                const sign = CryptoJS.enc.Base64.stringify(signBytes);
+
+                console.log('[前端Token計算] 簽名:', sign);
+
+                // 生成Token
+                const token = `version=${version}&res=${res1}&et=${et}&method=${method}&sign=${encodeURIComponent(sign)}`;
+
+                console.log('[前端Token計算] Token:', token);
+                return token;
             } catch (error) {
                 console.error('[前端Token計算] 失敗:', error);
                 return null;
@@ -2606,14 +2611,17 @@
                 showOneNETResponse('正在連接到OneNET...', 'info');
 
                 // 計算Token
-                const token = await calculateOneNETToken(productID, deviceName, deviceKey);
+                const token = calculateOneNETToken(productID, deviceName, deviceKey);
 
                 if (!token) {
                     throw new Error('Token計算失敗');
                 }
 
+                console.log('[OneNET連接] Token:', token);
+
                 // 生成topic
                 const topic = `$sys/${productID}/${deviceName}/thing/property/post`;
+                console.log('[OneNET連接] Topic:', topic);
 
                 // 準備請求體
                 const requestBody = {
@@ -2626,27 +2634,31 @@
                     }
                 };
 
-                // 發送HTTP POST請求到本地代理服務器
-                // 而不是直接調用OneNET（避免CORS問題）
-                const proxyUrl = '/api/onenet/connect';  // 本地代理端點
+                // 使用 CORS 代理轉發請求到 OneNET API
+                const oneNetApiUrl = `https://api.heclouds.com/mqtt-api/v1.0/devices/${deviceName}/requests`;
+                const corsProxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(oneNetApiUrl)}`;
 
-                const response = await fetch(proxyUrl, {
+                const response = await fetch(corsProxyUrl, {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
                     },
-                    body: JSON.stringify({
-                        token: token,
-                        topic: topic,
-                        data: requestBody
-                    })
+                    body: JSON.stringify(requestBody)
                 });
 
-                const responseData = await response.json();
-                const responseText = JSON.stringify(responseData, null, 2);
+                const responseText = await response.text();
+                let responseData;
+                try {
+                    responseData = JSON.parse(responseText);
+                } catch (e) {
+                    responseData = { raw: responseText };
+                }
 
-                if (response.ok && responseData.success) {
-                    showOneNETResponse(`✓ 成功連接到OneNET!\n\n狀態碼: ${responseData.statusCode}\n回應內容:\n${responseText}`, 'success');
+                const responseDisplay = JSON.stringify(responseData, null, 2);
+
+                if (response.ok) {
+                    showOneNETResponse(`✓ 成功連接到OneNET!\n\n狀態碼: ${response.status}\n回應內容:\n${responseDisplay}`, 'success');
 
                     // 保存OneNET設置
                     const oneNetConfig = {
@@ -2660,13 +2672,12 @@
                     localStorage.setItem('oneNetConfig', JSON.stringify(oneNetConfig));
                     addSerialLog('OneNET: 成功連接到OneNET', 'system');
                 } else {
-                    const errorMsg = responseData.message || '連接失敗';
-                    showOneNETResponse(`✗ 連接失敗\n\n狀態碼: ${responseData.statusCode || 'unknown'}\n錯誤信息:\n${errorMsg}\n\n回應內容:\n${responseText}`, 'error');
-                    addSerialLog(`OneNET連接失敗: ${errorMsg}`, 'error');
+                    showOneNETResponse(`✗ 連接失敗\n\n狀態碼: ${response.status}\n回應內容:\n${responseDisplay}`, 'error');
+                    addSerialLog(`OneNET連接失敗`, 'error');
                 }
             } catch (error) {
                 console.error('OneNET連接錯誤:', error);
-                showOneNETResponse(`✗ 連接錯誤: ${error.message}\n\n常見原因:\n1. 後端代理服務未啟動\n2. 檢查代理服務器地址是否正確\n3. 確保已正確填寫所有必填字段\n4. 檢查Product ID和Device Key是否正確\n\n請參考部署文檔以啟動後端代理服務。`, 'error');
+                showOneNETResponse(`✗ 連接錯誤: ${error.message}\n\n已自動使用 CORS 代理處理跨域請求。\n請檢查:\n1. 是否有互聯網連接\n2. Product ID 和 Device Key 是否正確\n3. Device Key 是否為 Base64 編碼格式`, 'error');
                 addSerialLog(`OneNET連接錯誤: ${error.message}`, 'error');
             }
         }
