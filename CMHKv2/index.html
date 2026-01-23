@@ -6,7 +6,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CMHKv2 Web</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
     <style>
         body {
             font-family: 'Arial', sans-serif;
@@ -1204,8 +1203,8 @@
                 </div>
 
                 <div style="display: flex; gap: 10px;">
-                    <button class="btn-confirm" onclick="connectToOneNET()">連接</button>
-                    <button class="btn-cancel" onclick="disconnectFromOneNET()">斷開</button>
+                    <button class="btn-confirm" onclick="saveOneNETSettings()">保存設置</button>
+                    <button class="btn-cancel" onclick="clearOneNETSettings()">清除設置</button>
                 </div>
                 <div class="onenet-response-box" id="onenetResponseBox">
                     <!-- OneNET回復信息将在這裡顯示 -->
@@ -1240,8 +1239,14 @@
     <script>
         // 全局狀態管理
         let deviceConnected = false;
-        let serialPort = null;
-        let reader = null;
+        // BLE 相關
+        let bleDevice = null;
+        let txCharacteristic = null; // 寫入（TX）
+        let rxCharacteristic = null; // 接收通知（RX）
+        // Nordic UART Service UUID (Gyro_LSM6DS3TR 設備)
+        const BLE_SERVICE_UUID = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
+        const BLE_TX_UUID = '6e400003-b5a3-f393-e0a9-e50e24dcca9e'; // notify (device -> central)
+        const BLE_RX_UUID = '6e400002-b5a3-f393-e0a9-e50e24dcca9e'; // write   (central -> device)
         let charts = {}; // 動態圖表 {sensorName: chartInstance}
         let sensorDataMap = {}; // 傳感器數據 {sensorName: {unit, data: []}}
         let sensorConfig = {}; // 傳感器配置 {id: {name, type, gpio, lastActive}}
@@ -1252,43 +1257,65 @@
         let sensorIdCounter = 0; // 傳感器ID計數器
         let gpioIdCounter = 0; // GPIO ID計數器
         let gpioConfirmStatus = {}; // GPIO 確認狀態 {gpioId: {pin, confirmed, value}}
-        let serialReceiveBuffer = ''; // 串口接收缓冲区，用于处理分片数据
+        let serialReceiveBuffer = ''; // 接收缓冲区（兼容串行/藍牙分片）
         let colorPalette = ['#dc3545', '#007bff', '#28a745', '#ffc107', '#17a2b8', '#fd7e14', '#6f42c1', '#20c997']; // 圖表顏色調色板
         let colorIndex = 0; // 顏色索引
         let pendingDHT11Config = {}; // 待創建的DHT11傳感器 {gpio: {sensorId, name, type, gpio}}
         let pendingDHT11Delete = {}; // 待刪除的DHT11傳感器 {gpio: sensorId}
 
-        // 處理設備連接
+        // 處理設備連接（改為使用藍牙）
         async function handleDeviceConnection() {
-            const btn = document.getElementById('connectBtn');
-
             if (deviceConnected) {
-                // 斷開連接
                 await disconnectDevice();
             } else {
-                // 連接設備
                 await connectDevice();
             }
         }
 
-        // 連接設備
+        // 連接設備（使用 Web Bluetooth，基於 NUS-like TX/RX）
         async function connectDevice() {
             try {
-                // 請求用戶選擇串口
-                serialPort = await navigator.serial.requestPort();
+                addSerialLog('系統: 嘗試通過藍牙連接設備...', 'system');
 
-                // 打開串口
-                await serialPort.open({ baudRate: 115200 });
+                bleDevice = await navigator.bluetooth.requestDevice({
+                    filters: [{ name: 'Gyro_LSM6DS3TR' }],
+                    optionalServices: [BLE_SERVICE_UUID]
+                });
 
+                const server = await bleDevice.gatt.connect();
+                const service = await server.getPrimaryService(BLE_SERVICE_UUID);
+
+                // 獲取 RX (write) 和 TX (notify) 特徵
+                try {
+                    rxCharacteristic = await service.getCharacteristic(BLE_RX_UUID); // write
+                    console.log('RX characteristic found:', BLE_RX_UUID);
+                } catch (e) {
+                    console.error('無法獲取 RX 特徵:', e);
+                    rxCharacteristic = null;
+                }
+                try {
+                    txCharacteristic = await service.getCharacteristic(BLE_TX_UUID); // notify
+                    console.log('TX characteristic found:', BLE_TX_UUID);
+                } catch (e) {
+                    console.error('無法獲取 TX 特徵:', e);
+                    txCharacteristic = null;
+                }
+
+                if (txCharacteristic) {
+                    await txCharacteristic.startNotifications();
+                    txCharacteristic.addEventListener('characteristicvaluechanged', handleBLENotification);
+                    addSerialLog('系統: TX 通知已啟用', 'system');
+                }
+
+                // 設置斷開事件監聽
+                setupBLEDisconnectHandler();
                 deviceConnected = true;
-                addSerialLog('系統: 連接成功，波特率115200', 'system');
+                serialReceiveBuffer = '';
+                addSerialLog('系統: 藍牙連接成功', 'system');
                 updateConnectButton();
 
-                // 開始讀取數據
-                readFromDevice();
-
             } catch (error) {
-                console.error('連接失敗:', error);
+                console.error('藍牙連接失敗:', error);
                 addSerialLog('錯誤: ' + error.message, 'error');
                 alert('連接失敗: ' + error.message);
                 deviceConnected = false;
@@ -1296,21 +1323,55 @@
             }
         }
 
-        // 斷開設備連接
+        // 處理藍牙通知數據
+        function handleBLENotification(event) {
+            try {
+                const value = event.target.value;
+                const decoder = new TextDecoder();
+                const dataChunk = decoder.decode(value);
+                // 添加到緩衝區並按行解析（同串口）
+                serialReceiveBuffer += dataChunk;
+                const lines = serialReceiveBuffer.split(/\r\n|\r|\n/);
+                serialReceiveBuffer = lines.pop() || '';
+
+                for (const line of lines) {
+                    if (line.trim()) {
+                        addSerialLog(line, 'receive');
+                        handleGPIOConfirmation(line);
+                        handleDHT11Confirmation(line);
+                        processSensorData(line);
+                    }
+                }
+            } catch (e) {
+                console.error('處理BLE通知失敗:', e);
+            }
+        }
+
+        // 斷開藍牙連接
         async function disconnectDevice() {
             try {
-                if (reader) {
-                    await reader.cancel();
+                if (txCharacteristic) {
+                    try {
+                        await txCharacteristic.stopNotifications();
+                        txCharacteristic.removeEventListener('characteristicvaluechanged', handleBLENotification);
+                    } catch (e) {
+                        // ignore
+                    }
                 }
-                if (serialPort) {
-                    await serialPort.close();
+
+                if (bleDevice && bleDevice.gatt && bleDevice.gatt.connected) {
+                    bleDevice.gatt.disconnect();
                 }
+
                 deviceConnected = false;
-                serialReceiveBuffer = ''; // 清空接收緩衝區
+                bleDevice = null;
+                txCharacteristic = null;
+                rxCharacteristic = null;
+                serialReceiveBuffer = '';
                 addSerialLog('系統: 設備已斷開連接', 'system');
                 updateConnectButton();
             } catch (error) {
-                console.error('斷開連接失敗:', error);
+                console.error('斷開藍牙失敗:', error);
                 addSerialLog('錯誤: ' + error.message, 'error');
             }
         }
@@ -1326,63 +1387,6 @@
                 btn.classList.remove('connected');
                 btn.classList.add('disconnected');
                 btn.textContent = '連接設備';
-            }
-        }
-
-        // 從設備讀取數據
-        async function readFromDevice() {
-            try {
-                reader = serialPort.readable.getReader();
-                addSerialLog('系統: 開始讀取串口數據', 'system');
-                serialReceiveBuffer = ''; // 初始化接收缓冲区
-
-                while (true) {
-                    const { value, done } = await reader.read();
-                    if (done) {
-                        break;
-                    }
-
-                    // 處理接收到的數據
-                    const decoder = new TextDecoder();
-                    const dataChunk = decoder.decode(value);
-                    console.log('接收數據塊:', dataChunk);
-
-                    // 將數據添加到緩衝區
-                    serialReceiveBuffer += dataChunk;
-
-                    // 按行分割緩衝區中的數據
-                    // 支持 \n、\r\n、\r 三種換行符
-                    const lines = serialReceiveBuffer.split(/\r\n|\r|\n/);
-
-                    // 最後一個元素可能不是完整的行（沒有換行符），保留在緩衝區中
-                    serialReceiveBuffer = lines.pop() || '';
-
-                    // 處理每一行完整的數據
-                    for (const line of lines) {
-                        if (line.trim()) { // 忽略空行
-                            console.log('完整行數據:', line);
-
-                            // 記錄接收到的數據（按行記錄）
-                            addSerialLog(line, 'receive');
-
-                            // 檢查是否是 GPIO 設置確認回復
-                            handleGPIOConfirmation(line);
-
-                            // 檢查是否是 DHT11 確認回復
-                            handleDHT11Confirmation(line);
-
-                            // 解析數據並更新圖表
-                            processSensorData(line);
-                        }
-                    }
-                }
-            } catch (error) {
-                if (error.name !== 'AbortError') {
-                    console.error('讀取數據錯誤:', error);
-                    addSerialLog('錯誤: ' + error.message, 'error');
-                    deviceConnected = false;
-                    updateConnectButton();
-                }
             }
         }
 
@@ -1646,9 +1650,9 @@
             }
         }
 
-        // 發送GPIO命令給設備
+        // 發送GPIO命令給設備（通過 BLE RX 特徵 write）
         async function sendGPIOCommand(gpioId, value) {
-            if (!deviceConnected || !serialPort) return;
+            if (!deviceConnected || !rxCharacteristic) return;
 
             try {
                 const config = gpioConfig[gpioId];
@@ -1659,10 +1663,8 @@
                     value: value
                 });
 
-                const writer = serialPort.writable.getWriter();
                 const encoder = new TextEncoder();
-                await writer.write(encoder.encode(command + '\n'));
-                writer.releaseLock();
+                await rxCharacteristic.writeValue(encoder.encode(command + '\n'));
 
                 addSerialLog(`發送GPIO命令: ${command}`, 'send');
             } catch (error) {
@@ -1671,16 +1673,14 @@
             }
         }
 
-        // 發送DHT11添加命令給設備
+        // 發送DHT11添加命令給設備（通過 BLE RX）
         async function sendDHT11AddCommand(gpio) {
-            if (!deviceConnected || !serialPort) return;
+            if (!deviceConnected || !rxCharacteristic) return;
 
             try {
                 const command = `AT+ADDDHT11=${gpio}`;
-                const writer = serialPort.writable.getWriter();
                 const encoder = new TextEncoder();
-                await writer.write(encoder.encode(command + '\r\n'));
-                writer.releaseLock();
+                await rxCharacteristic.writeValue(encoder.encode(command + '\r\n'));
 
                 addSerialLog(`發送DHT11添加命令: ${command}`, 'send');
             } catch (error) {
@@ -1689,16 +1689,14 @@
             }
         }
 
-        // 發送DHT11刪除命令給設備
+        // 發送DHT11刪除命令給設備（通過 BLE RX）
         async function sendDHT11DeleteCommand(gpio) {
-            if (!deviceConnected || !serialPort) return;
+            if (!deviceConnected || !rxCharacteristic) return;
 
             try {
                 const command = `AT+DELDHT11=${gpio}`;
-                const writer = serialPort.writable.getWriter();
                 const encoder = new TextEncoder();
-                await writer.write(encoder.encode(command + '\r\n'));
-                writer.releaseLock();
+                await rxCharacteristic.writeValue(encoder.encode(command + '\r\n'));
 
                 addSerialLog(`發送DHT11刪除命令: ${command}`, 'send');
             } catch (error) {
@@ -1717,7 +1715,7 @@
 
         // 確認 GPIO 值（發送AT命令給設備）
         async function confirmGPIOValue(gpioId) {
-            if (!deviceConnected || !serialPort) {
+            if (!deviceConnected || !rxCharacteristic) {
                 alert('請先連接設備');
                 return;
             }
@@ -1736,13 +1734,15 @@
 
                 const command = `AT+${config.pin}=${value}`;
 
-                // 發送命令
-                const writer = serialPort.writable.getWriter();
+                // 發送命令（BLE RX）
                 const encoder = new TextEncoder();
-                await writer.write(encoder.encode(command + '\r\n'));
-                writer.releaseLock();
-
-                addSerialLog(`發送GPIO確定命令: ${command}`, 'send');
+                try {
+                    await rxCharacteristic.writeValue(encoder.encode(command + '\r\n'));
+                    addSerialLog(`發送GPIO確定命令: ${command}`, 'send');
+                } catch (e) {
+                    console.error('發送GPIO確定命令透過BLE失敗:', e);
+                    addSerialLog('錯誤: 發送GPIO確定命令失敗 - ' + e.message, 'error');
+                }
 
                 // 設置等待確認的狀態
                 gpioConfirmStatus[gpioId] = {
@@ -1879,15 +1879,18 @@
             }
         }
 
-        // 監聽設備連接/斷開事件
-        navigator.serial.addEventListener('disconnect', () => {
-            if (deviceConnected) {
-                deviceConnected = false;
-                updateConnectButton();
-                addSerialLog('系統: 設備已物理斷開連接', 'system');
-                console.log('設備已斷開連接');
-            }
-        });
+        // 監聽 BLE 斷開事件
+        function setupBLEDisconnectHandler() {
+            if (!bleDevice) return;
+            bleDevice.addEventListener('gattserverdisconnected', () => {
+                if (deviceConnected) {
+                    deviceConnected = false;
+                    updateConnectButton();
+                    addSerialLog('系統: 設備已物理斷開連接', 'system');
+                    console.log('設備已斷開連接');
+                }
+            });
+        }
 
         // 頁面加載時初始化
         document.addEventListener('DOMContentLoaded', function () {
@@ -2265,21 +2268,6 @@
             }
         }
 
-        // 切換全選
-        function toggleSelectAll() {
-            // 此函数已不再使用
-        }
-
-        // 更新刪除按鈕狀態
-        function updateDeleteButton() {
-            // 此函数已不再使用
-        }
-
-        // 刪除選中的傳感器
-        function deleteSelectedSensors() {
-            // 此函数已不再使用
-        }
-
         // 保存傳感器配置到本地存儲
         function saveSensorConfig() {
             localStorage.setItem('sensorConfig', JSON.stringify(sensorConfig));
@@ -2533,13 +2521,12 @@
         // ==================== 重置設置功能 ====================
 
         // 保存WiFi設置
-        // 顯示OneNET回復信息
+
+        // OneNET 連接功能已移除。保留輸入框和本地保存功能（不發起網絡請求）。
         function showOneNETResponse(message, type = 'info') {
             const responseBox = document.getElementById('onenetResponseBox');
             responseBox.textContent = message;
             responseBox.className = `onenet-response-box show ${type}`;
-
-            // 自動清除錯誤消息（10秒後）
             if (type === 'error') {
                 setTimeout(() => {
                     responseBox.classList.remove('show');
@@ -2547,149 +2534,37 @@
             }
         }
 
-        // 計算OneNET Token - 客戶端實現
-        function calculateOneNETToken(productId, deviceName, deviceKey) {
-            try {
-                console.log('[前端Token計算] 開始計算Token');
-
-                const version = '2018-10-31';
-                // 簽名字符串中的資源名
-                const res = `products/${productId}/devices/${deviceName}`;
-                // Token中的資源名（URL編碼）
-                const res1 = `products%2F${productId}%2Fdevices%2F${deviceName}`;
-
-                const timestamp = Math.floor(Date.now() / 1000);
-                const et = String(timestamp + 5 * 60); // 5分鐘有效期
-                const method = 'md5'; // 必須是MD5
-
-                // 簽名字符串格式：et + method + res + version
-                const signString = `${et}\n${method}\n${res}\n${version}`;
-
-                console.log('[前端Token計算] 簽名字符串:', signString);
-                console.log('[前端Token計算] Device Key (Base64):', deviceKey);
-
-                // 使用CryptoJS計算HMAC-MD5
-                const key = CryptoJS.enc.Base64.parse(deviceKey);
-                const signBytes = CryptoJS.HmacMD5(signString, key);
-                const sign = CryptoJS.enc.Base64.stringify(signBytes);
-
-                console.log('[前端Token計算] 簽名:', sign);
-
-                // 生成Token
-                const token = `version=${version}&res=${res1}&et=${et}&method=${method}&sign=${encodeURIComponent(sign)}`;
-
-                console.log('[前端Token計算] Token:', token);
-                return token;
-            } catch (error) {
-                console.error('[前端Token計算] 失敗:', error);
-                return null;
-            }
-        }
-
-        // 連接到OneNET
-        async function connectToOneNET() {
-            // 首先驗證設置
+        // 保存 OneNET 設置到本地（不嘗試連接）
+        function saveOneNETSettings() {
             const userID = document.getElementById('userID').value.trim();
             const userAccessKey = document.getElementById('userAccessKey').value.trim();
             const productID = document.getElementById('productID').value.trim();
             const deviceName = document.getElementById('deviceName').value.trim();
             const deviceKey = document.getElementById('deviceKey').value.trim();
 
-            const errors = [];
-            if (!userID) errors.push('User_ID');
-            if (!userAccessKey) errors.push('User_AccessKey');
-            if (!productID) errors.push('Product ID');
-            if (!deviceName) errors.push('Device Name');
-            if (!deviceKey) errors.push('Device Key');
+            const required = [];
+            if (!userID) required.push('User_ID');
+            if (!userAccessKey) required.push('User_AccessKey');
+            if (!productID) required.push('Product ID');
+            if (!deviceName) required.push('Device Name');
+            if (!deviceKey) required.push('Device Key');
 
-            if (errors.length > 0) {
-                showOneNETResponse('請填寫以下必填字段：' + errors.join(', '), 'error');
+            if (required.length > 0) {
+                showOneNETResponse('請填寫以下必填字段：' + required.join(', '), 'error');
                 return;
             }
 
-            try {
-                showOneNETResponse('正在連接到OneNET...', 'info');
-
-                // 計算Token
-                const token = calculateOneNETToken(productID, deviceName, deviceKey);
-
-                if (!token) {
-                    throw new Error('Token計算失敗');
-                }
-
-                console.log('[OneNET連接] Token:', token);
-
-                // 生成topic
-                const topic = `$sys/${productID}/${deviceName}/thing/property/post`;
-                console.log('[OneNET連接] Topic:', topic);
-
-                // 準備請求體
-                const requestBody = {
-                    "id": "123",
-                    "version": "1.0",
-                    "params": {
-                        "data": {
-                            "value": "connection_test"
-                        }
-                    }
-                };
-
-                // 使用 CORS 代理轉發請求到 OneNET API
-                const oneNetApiUrl = `https://api.heclouds.com/mqtt-api/v1.0/devices/${deviceName}/requests`;
-                const corsProxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(oneNetApiUrl)}`;
-
-                const response = await fetch(corsProxyUrl, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`
-                    },
-                    body: JSON.stringify(requestBody)
-                });
-
-                const responseText = await response.text();
-                let responseData;
-                try {
-                    responseData = JSON.parse(responseText);
-                } catch (e) {
-                    responseData = { raw: responseText };
-                }
-
-                const responseDisplay = JSON.stringify(responseData, null, 2);
-
-                if (response.ok) {
-                    showOneNETResponse(`✓ 成功連接到OneNET!\n\n狀態碼: ${response.status}\n回應內容:\n${responseDisplay}`, 'success');
-
-                    // 保存OneNET設置
-                    const oneNetConfig = {
-                        userID: userID,
-                        userAccessKey: userAccessKey,
-                        productID: productID,
-                        deviceName: deviceName,
-                        deviceKey: deviceKey,
-                        timestamp: new Date().toISOString()
-                    };
-                    localStorage.setItem('oneNetConfig', JSON.stringify(oneNetConfig));
-                    addSerialLog('OneNET: 成功連接到OneNET', 'system');
-                } else {
-                    showOneNETResponse(`✗ 連接失敗\n\n狀態碼: ${response.status}\n回應內容:\n${responseDisplay}`, 'error');
-                    addSerialLog(`OneNET連接失敗`, 'error');
-                }
-            } catch (error) {
-                console.error('OneNET連接錯誤:', error);
-                showOneNETResponse(`✗ 連接錯誤: ${error.message}\n\n已自動使用 CORS 代理處理跨域請求。\n請檢查:\n1. 是否有互聯網連接\n2. Product ID 和 Device Key 是否正確\n3. Device Key 是否為 Base64 編碼格式`, 'error');
-                addSerialLog(`OneNET連接錯誤: ${error.message}`, 'error');
-            }
+            const oneNetConfig = {
+                userID, userAccessKey, productID, deviceName, deviceKey, timestamp: new Date().toISOString()
+            };
+            localStorage.setItem('oneNetConfig', JSON.stringify(oneNetConfig));
+            showOneNETResponse('OneNET 設置已保存 (未啟用連接功能)', 'success');
+            addSerialLog('OneNET 設置已保存 (本地)', 'system');
         }
 
-        // 斷開OneNET連接
-        function disconnectFromOneNET() {
-            // 清除保存的設置
+        // 清除本地保存的 OneNET 設置（僅本地操作）
+        function clearOneNETSettings() {
             localStorage.removeItem('oneNetConfig');
-            showOneNETResponse('✓ 已從OneNET斷開連接', 'info');
-            addSerialLog('OneNET: 已斷開連接', 'system');
-
-            // 清空輸入框
             document.getElementById('userID').value = '';
             document.getElementById('userAccessKey').value = '';
             document.getElementById('productID').value = '';
@@ -2697,16 +2572,8 @@
             document.getElementById('deviceKey').value = '';
             document.getElementById('imei').value = '';
             document.getElementById('imsi').value = '';
-
-            // 1秒後隱藏回復框
-            setTimeout(() => {
-                document.getElementById('onenetResponseBox').classList.remove('show');
-            }, 1000);
-        }
-
-        // 保存OneNET設置（保留此函數用於兼容性）
-        function saveOneNETSettings() {
-            connectToOneNET();
+            showOneNETResponse('OneNET 設置已清除', 'info');
+            addSerialLog('OneNET 設置已清除 (本地)', 'system');
         }
 
         // 加載已保存的設置
