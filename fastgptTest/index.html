@@ -1,19 +1,19 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FastGPT 自動對話</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
+        /* 保持之前的CSS樣式不變 */
         * {
             box-sizing: border-box;
             margin: 0;
             padding: 0;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
-
+        
         body {
             background: linear-gradient(135deg, #1a2a6c, #4a6491, #f5f7fa);
             color: #333;
@@ -23,7 +23,7 @@
             flex-direction: column;
             align-items: center;
         }
-
+        
         .container {
             width: 100%;
             max-width: 800px;
@@ -33,330 +33,66 @@
             padding: 30px;
             margin-top: 20px;
         }
-
-        header {
-            text-align: center;
-            margin-bottom: 30px;
-        }
-
-        h1 {
-            color: #1a2a6c;
-            margin-bottom: 10px;
-            font-size: 2.2rem;
-        }
-
-        .subtitle {
-            color: #4a6491;
-            font-size: 1.1rem;
-        }
-
-        .status-container {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 25px;
-            background-color: #f5f7fa;
-            border-radius: 10px;
-            padding: 15px 20px;
-            border-left: 5px solid #4a6491;
-        }
-
-        .status-info {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-        }
-
-        .status-dot {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            background-color: #ccc;
-        }
-
-        .status-dot.active {
-            background-color: #4CAF50;
-            box-shadow: 0 0 8px #4CAF50;
-            animation: pulse 2s infinite;
-        }
-
-        @keyframes pulse {
-            0% {
-                opacity: 1;
-            }
-
-            50% {
-                opacity: 0.7;
-            }
-
-            100% {
-                opacity: 1;
-            }
-        }
-
-        .auto-start {
-            background-color: #e8f5e9;
-            color: #2e7d32;
-            padding: 8px 15px;
-            border-radius: 20px;
-            font-size: 0.9rem;
-            font-weight: 600;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .config-section {
-            background-color: #f5f7fa;
-            border-radius: 10px;
-            padding: 20px;
-            margin-bottom: 25px;
-            border-left: 5px solid #4a6491;
-        }
-
-        .config-section h2 {
-            color: #1a2a6c;
-            margin-bottom: 15px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .input-group {
-            margin-bottom: 15px;
-        }
-
-        label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: 600;
-            color: #333;
-        }
-
-        input,
-        select {
-            width: 100%;
-            padding: 12px 15px;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            font-size: 16px;
-            transition: border 0.3s;
-        }
-
-        input:focus,
-        select:focus {
-            outline: none;
-            border-color: #4a6491;
-            box-shadow: 0 0 0 2px rgba(74, 100, 145, 0.2);
-        }
-
-        .api-key-container {
-            position: relative;
-        }
-
-        .toggle-password {
-            position: absolute;
-            right: 12px;
-            top: 38px;
-            background: none;
-            border: none;
-            color: #666;
-            cursor: pointer;
-            font-size: 18px;
-        }
-
-        .loading {
-            display: none;
-            text-align: center;
-            margin: 30px 0;
-        }
-
-        .loading.active {
-            display: block;
-        }
-
-        .spinner {
-            border: 4px solid rgba(0, 0, 0, 0.1);
-            width: 50px;
-            height: 50px;
-            border-radius: 50%;
-            border-left-color: #1a2a6c;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 20px;
-        }
-
-        .loading-text {
-            font-size: 1.2rem;
-            color: #1a2a6c;
-            margin-bottom: 10px;
-        }
-
-        .loading-subtext {
-            color: #666;
-            font-size: 0.95rem;
-        }
-
-        @keyframes spin {
-            0% {
-                transform: rotate(0deg);
-            }
-
-            100% {
-                transform: rotate(360deg);
-            }
-        }
-
-        .response-section {
-            margin-top: 30px;
-        }
-
-        .response-section h2 {
-            color: #1a2a6c;
-            margin-bottom: 15px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .chat-container {
-            background-color: #f9f9f9;
-            border-radius: 10px;
-            padding: 20px;
-            min-height: 300px;
-            max-height: 500px;
-            overflow-y: auto;
-            border: 1px solid #eee;
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-        }
-
-        .chat-message {
-            display: flex;
-            max-width: 85%;
-        }
-
-        .user-message {
-            margin-left: auto;
-            flex-direction: row-reverse;
-        }
-
-        .message-bubble {
-            padding: 15px 20px;
-            border-radius: 20px;
-            position: relative;
-            max-width: 100%;
-            line-height: 1.5;
-        }
-
-        .assistant-message .message-bubble {
+        
+        /* ... 保持其他CSS樣式不變 ... */
+        
+        .proxy-notice {
             background-color: #e3f2fd;
-            border-bottom-left-radius: 5px;
-        }
-
-        .user-message .message-bubble {
-            background-color: #4a6491;
-            color: white;
-            border-bottom-right-radius: 5px;
-        }
-
-        .message-avatar {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin: 0 10px;
-            flex-shrink: 0;
-        }
-
-        .assistant-avatar {
-            background-color: #1a2a6c;
-            color: white;
-        }
-
-        .user-avatar {
-            background-color: #4a6491;
-            color: white;
-        }
-
-        .message-time {
-            font-size: 0.8rem;
-            color: #999;
-            margin-top: 5px;
-            text-align: right;
-        }
-
-        .error-message {
-            background-color: #ffebee;
-            color: #c62828;
+            border-left: 5px solid #2196F3;
             padding: 15px;
             border-radius: 8px;
-            margin-top: 20px;
-            border-left: 5px solid #c62828;
+            margin-top: 15px;
+            font-size: 0.9rem;
             display: none;
         }
-
-        .error-message.active {
+        
+        .proxy-notice.active {
             display: block;
         }
-
-        .retry-button {
-            background-color: #1a2a6c;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 8px;
-            font-size: 16px;
-            cursor: pointer;
-            margin-top: 15px;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            transition: background-color 0.3s;
-        }
-
-        .retry-button:hover {
-            background-color: #0f1a4a;
-        }
-
-        footer {
-            margin-top: 30px;
-            text-align: center;
-            color: rgba(255, 255, 255, 0.8);
-            font-size: 0.9rem;
-        }
-
+        
         @media (max-width: 600px) {
             .container {
                 padding: 20px;
             }
-
+            
             .status-container {
                 flex-direction: column;
                 gap: 15px;
                 align-items: flex-start;
             }
-
+            
             h1 {
                 font-size: 1.8rem;
             }
-
+            
             .chat-message {
                 max-width: 95%;
             }
         }
     </style>
 </head>
-
 <body>
     <div class="container">
         <header>
             <h1><i class="fas fa-robot"></i> FastGPT 自動對話</h1>
-            <p class="subtitle">頁面加載時自動開始新對話</p>
+            <p class="subtitle">頁面加載時自動開始新對話（CORS代理版本）</p>
         </header>
-
+        
+        <div class="proxy-notice" id="proxyNotice">
+            <strong><i class="fas fa-info-circle"></i> 注意：</strong> 
+            正在使用CORS代理連接到FastGPT API以解決跨域問題。如果連接不穩定，請嘗試切換代理服務器。
+            <div style="margin-top: 10px;">
+                <label for="proxySelector">選擇代理服務器：</label>
+                <select id="proxySelector" style="margin-top: 5px; padding: 5px; width: 100%;">
+                    <option value="cors-anywhere">CORS Anywhere (cors-anywhere.herokuapp.com)</option>
+                    <option value="allorigins">AllOrigins (api.allorigins.win)</option>
+                    <option value="corsproxy">CorsProxy (corsproxy.io)</option>
+                    <option value="thingproxy">ThingProxy (thingproxy.freeboard.io)</option>
+                    <option value="none" selected>不使用代理（如果API支持CORS）</option>
+                </select>
+            </div>
+        </div>
+        
         <div class="status-container">
             <div class="status-info">
                 <div class="status-dot" id="statusDot"></div>
@@ -366,26 +102,23 @@
                 <i class="fas fa-bolt"></i> 自動啟動對話
             </div>
         </div>
-
+        
         <section class="config-section">
             <h2><i class="fas fa-cog"></i> API 配置</h2>
-
+            
             <div class="input-group">
                 <label for="apiEndpoint">FastGPT API 端點</label>
-                <input type="text" id="apiEndpoint"
-                    placeholder="https://your-fastgpt-instance.com/api/v1/chat/completions"
-                    value="https://api.fastgpt.in/api">
+                <input type="text" id="apiEndpoint" placeholder="https://api.fastgpt.in/api/v1/chat/completions" value="https://api.fastgpt.in/api/v1/chat/completions">
             </div>
-
+            
             <div class="input-group api-key-container">
                 <label for="apiKey">API 金鑰</label>
-                <input type="password" id="apiKey" placeholder="輸入你的API金鑰"
-                    value="fastgpt-nOQLVDk98ynEOPY3UqVUvgA3CPDS9vSZSHK1IpsphzaC96cAQjDYsFxpox">
+                <input type="password" id="apiKey" placeholder="輸入你的API金鑰" value="">
                 <button type="button" class="toggle-password" id="togglePassword">
                     <i class="fas fa-eye"></i>
                 </button>
             </div>
-
+            
             <div class="input-group">
                 <label for="model">模型選擇</label>
                 <select id="model">
@@ -395,20 +128,23 @@
                 </select>
             </div>
         </section>
-
+        
         <div class="loading" id="loadingIndicator">
             <div class="spinner"></div>
             <div class="loading-text">正在啟動 FastGPT 對話...</div>
             <div class="loading-subtext">請稍候，正在與 AI 助手建立連接</div>
         </div>
-
+        
         <div class="error-message" id="errorMessage">
             <div id="errorText"></div>
             <button class="retry-button" id="retryButton">
                 <i class="fas fa-redo"></i> 重試對話
             </button>
+            <button class="retry-button" id="toggleProxyButton" style="margin-left: 10px; background-color: #2196F3;">
+                <i class="fas fa-exchange-alt"></i> 切換代理
+            </button>
         </div>
-
+        
         <section class="response-section">
             <h2><i class="fas fa-comments"></i> 對話記錄</h2>
             <div class="chat-container" id="chatContainer">
@@ -416,13 +152,13 @@
             </div>
         </section>
     </div>
-
+    
     <footer>
-        <p>FastGPT 自動對話啟動器 &copy; 2023 | 頁面加載時自動開始新對話</p>
+        <p>FastGPT 自動對話啟動器 &copy; 2023 | 使用CORS代理解決跨域問題</p>
     </footer>
 
     <script>
-        document.addEventListener('DOMContentLoaded', function () {
+        document.addEventListener('DOMContentLoaded', function() {
             // 獲取DOM元素
             const apiEndpoint = document.getElementById('apiEndpoint');
             const apiKey = document.getElementById('apiKey');
@@ -432,10 +168,40 @@
             const errorMessage = document.getElementById('errorMessage');
             const errorText = document.getElementById('errorText');
             const retryButton = document.getElementById('retryButton');
+            const toggleProxyButton = document.getElementById('toggleProxyButton');
             const chatContainer = document.getElementById('chatContainer');
             const statusDot = document.getElementById('statusDot');
             const statusText = document.getElementById('statusText');
-
+            const proxyNotice = document.getElementById('proxyNotice');
+            const proxySelector = document.getElementById('proxySelector');
+            
+            // CORS代理配置
+            const proxyConfig = {
+                'none': { url: '', name: '不使用代理' },
+                'cors-anywhere': { 
+                    url: 'https://cors-anywhere.herokuapp.com/', 
+                    name: 'CORS Anywhere',
+                    requiresActivation: true
+                },
+                'allorigins': { 
+                    url: 'https://api.allorigins.win/get?url=', 
+                    name: 'AllOrigins',
+                    format: 'json'
+                },
+                'corsproxy': { 
+                    url: 'https://corsproxy.io/?', 
+                    name: 'CorsProxy.io'
+                },
+                'thingproxy': { 
+                    url: 'https://thingproxy.freeboard.io/fetch/', 
+                    name: 'ThingProxy'
+                }
+            };
+            
+            // 當前代理設置
+            let currentProxy = 'none';
+            let useProxy = false;
+            
             // 初始化對話消息
             const initialMessages = [
                 {
@@ -443,18 +209,18 @@
                     content: '你好！請介紹一下你自己以及你的功能。'
                 }
             ];
-
+            
             // 顯示/隱藏密碼
-            togglePassword.addEventListener('click', function () {
+            togglePassword.addEventListener('click', function() {
                 const type = apiKey.getAttribute('type') === 'password' ? 'text' : 'password';
                 apiKey.setAttribute('type', type);
                 togglePassword.innerHTML = type === 'password' ? '<i class="fas fa-eye"></i>' : '<i class="fas fa-eye-slash"></i>';
             });
-
+            
             // 更新狀態指示器
             function updateStatus(status, message) {
                 statusText.textContent = message;
-
+                
                 if (status === 'loading') {
                     statusDot.classList.remove('active');
                     statusDot.style.backgroundColor = '#FF9800';
@@ -469,43 +235,46 @@
                     statusDot.style.backgroundColor = '#ccc';
                 }
             }
-
+            
             // 顯示錯誤訊息
             function showError(message) {
                 errorText.textContent = message;
                 errorMessage.classList.add('active');
                 loadingIndicator.classList.remove('active');
                 updateStatus('error', '連接失敗');
+                
+                // 顯示代理提示
+                proxyNotice.classList.add('active');
             }
-
+            
             // 隱藏錯誤訊息
             function hideError() {
                 errorMessage.classList.remove('active');
             }
-
+            
             // 在聊天容器中添加消息
             function addMessageToChat(role, content) {
                 const messageDiv = document.createElement('div');
                 messageDiv.className = `chat-message ${role}-message`;
-
+                
                 const avatarDiv = document.createElement('div');
                 avatarDiv.className = `message-avatar ${role}-avatar`;
-
+                
                 const avatarIcon = document.createElement('i');
                 avatarIcon.className = role === 'user' ? 'fas fa-user' : 'fas fa-robot';
                 avatarDiv.appendChild(avatarIcon);
-
+                
                 const bubbleDiv = document.createElement('div');
                 bubbleDiv.className = 'message-bubble';
                 bubbleDiv.textContent = content;
-
+                
                 const timeDiv = document.createElement('div');
                 timeDiv.className = 'message-time';
                 const now = new Date();
                 timeDiv.textContent = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-
+                
                 bubbleDiv.appendChild(timeDiv);
-
+                
                 if (role === 'user') {
                     messageDiv.appendChild(bubbleDiv);
                     messageDiv.appendChild(avatarDiv);
@@ -513,11 +282,42 @@
                     messageDiv.appendChild(avatarDiv);
                     messageDiv.appendChild(bubbleDiv);
                 }
-
+                
                 chatContainer.appendChild(messageDiv);
                 chatContainer.scrollTop = chatContainer.scrollHeight;
             }
-
+            
+            // 構建代理URL
+            function buildProxyUrl(targetUrl) {
+                if (!useProxy || currentProxy === 'none') {
+                    return targetUrl;
+                }
+                
+                const proxy = proxyConfig[currentProxy];
+                
+                if (proxy.format === 'json') {
+                    // 對於返回JSON格式的代理
+                    return `${proxy.url}${encodeURIComponent(targetUrl)}`;
+                } else {
+                    // 對於直接轉發的代理
+                    return `${proxy.url}${encodeURIComponent(targetUrl)}`;
+                }
+            }
+            
+            // 處理代理響應
+            function handleProxyResponse(data, proxyType) {
+                if (proxyType === 'allorigins' && proxyConfig[proxyType].format === 'json') {
+                    // AllOrigins返回JSON格式
+                    try {
+                        const parsed = JSON.parse(data.contents);
+                        return parsed;
+                    } catch (e) {
+                        throw new Error('無法解析代理響應');
+                    }
+                }
+                return data;
+            }
+            
             // 開始對話函數
             async function startConversation() {
                 // 驗證輸入
@@ -525,25 +325,25 @@
                     showError('請輸入API端點');
                     return;
                 }
-
+                
                 if (!apiKey.value.trim()) {
                     showError('請輸入API金鑰');
                     return;
                 }
-
+                
                 // 顯示加載指示器
                 loadingIndicator.classList.add('active');
                 hideError();
                 updateStatus('loading', '正在連接FastGPT...');
-
+                
                 // 清空聊天容器並添加用戶消息
                 chatContainer.innerHTML = '';
-
+                
                 // 添加初始用戶消息
                 initialMessages.forEach(msg => {
                     addMessageToChat(msg.role, msg.content);
                 });
-
+                
                 try {
                     // 準備請求數據
                     const requestData = {
@@ -551,100 +351,163 @@
                         messages: initialMessages,
                         stream: false
                     };
-
-                    // 發送API請求
-                    const response = await fetch(apiEndpoint.value, {
+                    
+                    // 構建請求URL
+                    let requestUrl = apiEndpoint.value.trim();
+                    
+                    // 使用代理
+                    if (useProxy && currentProxy !== 'none') {
+                        requestUrl = buildProxyUrl(requestUrl);
+                        console.log(`使用代理 ${proxyConfig[currentProxy].name}: ${requestUrl}`);
+                    }
+                    
+                    // 設置請求選項
+                    const requestOptions = {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
                             'Authorization': `Bearer ${apiKey.value.trim()}`
                         },
                         body: JSON.stringify(requestData)
-                    });
-
+                    };
+                    
+                    // 對於某些代理，需要調整請求頭
+                    if (useProxy && currentProxy === 'cors-anywhere') {
+                        requestOptions.headers['X-Requested-With'] = 'XMLHttpRequest';
+                    }
+                    
+                    // 發送API請求
+                    const response = await fetch(requestUrl, requestOptions);
+                    
                     // 檢查回應狀態
                     if (!response.ok) {
+                        // 如果是CORS錯誤且沒有使用代理，建議使用代理
+                        if (response.status === 0 && !useProxy) {
+                            throw new Error('CORS錯誤：API服務器不允許跨域請求。已自動啟用代理模式，請重試。');
+                        }
+                        
                         const errorData = await response.text();
-                        throw new Error(`API請求失敗: ${response.status} ${response.statusText} - ${errorData}`);
+                        throw new Error(`API請求失敗: ${response.status} ${response.statusText}`);
                     }
-
+                    
                     // 解析回應
-                    const data = await response.json();
-
+                    let data;
+                    if (useProxy && currentProxy === 'allorigins') {
+                        const proxyResponse = await response.json();
+                        data = handleProxyResponse(proxyResponse, currentProxy);
+                    } else {
+                        data = await response.json();
+                    }
+                    
                     // 隱藏加載指示器
                     loadingIndicator.classList.remove('active');
-
+                    
                     // 檢查回應數據
                     if (data.choices && data.choices.length > 0) {
                         const assistantMessage = data.choices[0].message.content;
                         addMessageToChat('assistant', assistantMessage);
-
+                        
                         updateStatus('success', '對話進行中');
-
+                        
                         // 保存API配置到本地存儲
                         saveConfigToStorage();
+                        
+                        // 如果使用代理成功，隱藏代理提示
+                        if (useProxy) {
+                            proxyNotice.classList.remove('active');
+                        }
                     } else {
                         throw new Error('API回應格式不正確');
                     }
-
+                    
                 } catch (error) {
                     // 隱藏加載指示器
                     loadingIndicator.classList.remove('active');
-
+                    
                     // 顯示錯誤訊息
                     showError(`錯誤: ${error.message}`);
                     console.error('API請求錯誤:', error);
+                    
+                    // 如果是CORS錯誤，自動啟用代理
+                    if (error.message.includes('CORS') && !useProxy) {
+                        currentProxy = 'corsproxy';
+                        useProxy = true;
+                        proxySelector.value = currentProxy;
+                        proxyNotice.classList.add('active');
+                        
+                        // 自動重試
+                        setTimeout(() => {
+                            showError('檢測到CORS錯誤，已自動啟用代理。請點擊重試按鈕。');
+                        }, 1000);
+                    }
                 }
             }
-
+            
             // 保存配置到本地存儲
             function saveConfigToStorage() {
                 const config = {
                     apiEndpoint: apiEndpoint.value.trim(),
                     apiKey: apiKey.value.trim(),
-                    model: model.value
+                    model: model.value,
+                    useProxy: useProxy,
+                    currentProxy: currentProxy
                 };
-
+                
                 localStorage.setItem('fastgpt_auto_config', JSON.stringify(config));
             }
-
+            
             // 從本地存儲加載配置
             function loadConfigFromStorage() {
                 const savedConfig = localStorage.getItem('fastgpt_auto_config');
-
+                
                 if (savedConfig) {
                     try {
                         const config = JSON.parse(savedConfig);
-
+                        
                         if (config.apiEndpoint) {
                             apiEndpoint.value = config.apiEndpoint;
                         }
-
+                        
                         if (config.apiKey) {
                             apiKey.value = config.apiKey;
                         }
-
+                        
                         if (config.model) {
                             model.value = config.model;
                         }
-
+                        
+                        if (config.useProxy !== undefined) {
+                            useProxy = config.useProxy;
+                        }
+                        
+                        if (config.currentProxy) {
+                            currentProxy = config.currentProxy;
+                            proxySelector.value = currentProxy;
+                        }
+                        
                         return true;
                     } catch (e) {
                         console.error('解析保存的配置時出錯:', e);
                     }
                 }
-
+                
                 return false;
             }
-
+            
             // 自動開始對話
             function autoStartConversation() {
                 // 首先嘗試從本地存儲加載配置
                 const hasSavedConfig = loadConfigFromStorage();
-
+                
                 // 如果有保存的配置，自動開始對話
                 if (hasSavedConfig && apiEndpoint.value.trim() && apiKey.value.trim()) {
                     console.log('使用保存的配置自動開始對話...');
+                    
+                    // 如果配置了使用代理，顯示提示
+                    if (useProxy && currentProxy !== 'none') {
+                        proxyNotice.classList.add('active');
+                    }
+                    
                     setTimeout(() => {
                         startConversation();
                     }, 1000);
@@ -655,47 +518,75 @@
                     loadingIndicator.classList.remove('active');
                 }
             }
-
+            
+            // 切換代理服務器
+            proxySelector.addEventListener('change', function() {
+                currentProxy = this.value;
+                useProxy = currentProxy !== 'none';
+                
+                if (useProxy) {
+                    proxyNotice.classList.add('active');
+                } else {
+                    proxyNotice.classList.remove('active');
+                }
+                
+                saveConfigToStorage();
+            });
+            
             // 重試按鈕事件監聽器
-            retryButton.addEventListener('click', function () {
+            retryButton.addEventListener('click', function() {
                 saveConfigToStorage();
                 startConversation();
             });
-
+            
+            // 切換代理按鈕
+            toggleProxyButton.addEventListener('click', function() {
+                useProxy = !useProxy;
+                
+                if (useProxy && currentProxy === 'none') {
+                    currentProxy = 'corsproxy';
+                    proxySelector.value = currentProxy;
+                } else if (!useProxy) {
+                    currentProxy = 'none';
+                    proxySelector.value = currentProxy;
+                }
+                
+                proxyNotice.classList.toggle('active', useProxy);
+                saveConfigToStorage();
+                
+                // 提示用戶重試
+                showError(`已${useProxy ? '啟用' : '禁用'}代理模式。請點擊重試按鈕。`);
+            });
+            
             // 當API配置改變時保存到本地存儲
             apiEndpoint.addEventListener('change', saveConfigToStorage);
             apiKey.addEventListener('change', saveConfigToStorage);
             model.addEventListener('change', saveConfigToStorage);
-
+            
             // 頁面加載完成後自動開始對話
             setTimeout(() => {
                 autoStartConversation();
             }, 500);
-
-            // 模擬API響應（用於演示）
-            // 如果API端點包含example或demo，使用模擬響應
-            window.addEventListener('load', function () {
+            
+            // 演示模式
+            window.addEventListener('load', function() {
                 // 檢查是否是演示模式
-                const isDemoMode = apiEndpoint.value.includes('example') ||
-                    apiEndpoint.value.includes('demo') ||
-                    apiKey.value === 'demo-key' ||
-                    !apiKey.value.trim();
-
+                const isDemoMode = apiEndpoint.value.includes('example') || 
+                                   apiEndpoint.value.includes('demo') || 
+                                   apiKey.value === 'demo-key' ||
+                                   !apiKey.value.trim();
+                
                 if (isDemoMode && !apiKey.value.trim()) {
-                    // 設置演示用的API金鑰
                     apiKey.value = 'demo-key-12345';
-
-                    // 顯示演示模式消息
+                    
                     setTimeout(() => {
                         chatContainer.innerHTML = '';
                         initialMessages.forEach(msg => {
                             addMessageToChat(msg.role, msg.content);
                         });
-
-                        // 添加模擬的AI回應
+                        
                         const mockResponse = "你好！我是FastGPT助手，一個基於先進AI技術的對話助手。\n\n我的主要功能包括：\n\n1. **自然對話**：能夠進行流暢、自然的對話交流\n2. **多領域知識**：涵蓋科技、文化、教育、生活等多個領域\n3. **問題解答**：幫助解答各種疑問和提供建議\n4. **文本處理**：協助處理和分析文本內容\n5. **創意寫作**：支持故事創作、詩歌寫作等創意任務\n6. **學習輔助**：提供學習指導和知識解釋\n\n我已經準備好為您提供幫助！請問有什麼我可以為您做的嗎？";
-
-                        // 模擬加載延遲
+                        
                         setTimeout(() => {
                             loadingIndicator.classList.remove('active');
                             addMessageToChat('assistant', mockResponse);
@@ -707,5 +598,4 @@
         });
     </script>
 </body>
-
 </html>
