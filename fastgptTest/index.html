@@ -521,37 +521,28 @@
 
         // 測試連接
         async function testConnection() {
-            // 保存當前配置
             saveConfig();
-            
+    
             if (!config.proxyEndpoint) {
                 showError('請輸入Cloudflare Worker代理URL');
                 return;
             }
-            
+    
             if (!config.apiEndpoint) {
                 showError('請輸入FastGPT API端點');
                 return;
             }
-            
+    
             if (!config.apiKey) {
                 showError('請輸入API金鑰');
                 return;
             }
-            
+    
             showLoading();
             hideError();
-            
+    
             try {
-                // 首先測試Worker本身
-                const testUrl = `${config.proxyEndpoint}/test`;
-                const testResponse = await fetch(testUrl);
-                
-                if (!testResponse.ok) {
-                    throw new Error(`Worker測試失敗: ${testResponse.status}`);
-                }
-                
-                // 測試完整的API請求
+                // 直接測試API，不測試Worker
                 const requestData = {
                     model: config.model,
                     messages: [
@@ -562,13 +553,13 @@
                     ],
                     stream: false
                 };
-                
+        
                 // 構建代理URL
                 const apiUrl = `${config.apiEndpoint}/chat/completions`;
                 const proxyUrl = buildProxyUrl(apiUrl);
-                
+
                 console.log('測試請求URL:', proxyUrl);
-                
+
                 const response = await fetch(proxyUrl, {
                     method: 'POST',
                     headers: {
@@ -577,27 +568,25 @@
                     },
                     body: JSON.stringify(requestData)
                 });
-                
+
                 if (!response.ok) {
                     const errorText = await response.text();
                     throw new Error(`API測試失敗: ${response.status} - ${errorText.substring(0, 100)}`);
                 }
-                
+
                 const data = await response.json();
-                
-                if (data.choices && data.choices[0]) {
+
+               if (data.choices && data.choices[0]) {
                     config.isConnected = true;
                     updateStatus();
                     hideLoading();
-                    
-                    // 顯示測試成功的消息
+
                     addMessage('bot', '連接測試成功！FastGPT API 正常工作。');
-                    
                     console.log('連接測試成功:', data);
                 } else {
                     throw new Error('API回應格式不正確');
                 }
-                
+
             } catch (error) {
                 hideLoading();
                 config.isConnected = false;
