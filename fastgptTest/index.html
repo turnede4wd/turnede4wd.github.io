@@ -1,108 +1,722 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-TW">
 
 <head>
-    <title>FastGPT Agent</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FastGPT Agent - Cloudflare Worker代理</title>
     <style>
-        #chat-container {
-            max-width: 600px;
-            margin: 0 auto;
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, #1a2a6c, #4a6491, #f5f7fa);
+            min-height: 100vh;
             padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #chat-container {
+            width: 100%;
+            max-width: 800px;
+            background-color: white;
+            border-radius: 15px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
+            padding: 30px;
+            display: flex;
+            flex-direction: column;
+            height: 90vh;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        h1 {
+            color: #1a2a6c;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 15px;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            font-size: 0.9rem;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: #6c757d;
+        }
+
+        .status-dot.connected {
+            background-color: #28a745;
+            box-shadow: 0 0 8px rgba(40, 167, 69, 0.5);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.6; }
+            100% { opacity: 1; }
+        }
+
+        .config-panel {
+            background-color: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-left: 5px solid #4a6491;
+        }
+
+        .config-panel h3 {
+            color: #1a2a6c;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .input-group {
+            margin-bottom: 15px;
+        }
+
+        .input-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #333;
+            font-size: 0.9rem;
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 10px 15px;
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        .input-group input:focus {
+            outline: none;
+            border-color: #4a6491;
+            box-shadow: 0 0 0 3px rgba(74, 100, 145, 0.2);
+        }
+
+        .api-key-container {
+            position: relative;
+        }
+
+        .toggle-password {
+            position: absolute;
+            right: 10px;
+            top: 33px;
+            background: none;
+            border: none;
+            color: #6c757d;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        .test-button {
+            background-color: #4a6491;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            margin-top: 10px;
+            transition: background-color 0.3s;
+        }
+
+        .test-button:hover {
+            background-color: #1a2a6c;
         }
 
         #messages {
-            height: 400px;
+            flex: 1;
             overflow-y: auto;
-            border: 1px solid #ccc;
-            padding: 10px;
-            margin-bottom: 10px;
+            border: 1px solid #dee2e6;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            background-color: #fafafa;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
         }
 
         .message {
-            margin: 10px 0;
-            padding: 8px;
-            border-radius: 5px;
+            max-width: 80%;
+            padding: 12px 16px;
+            border-radius: 18px;
+            line-height: 1.5;
+            word-wrap: break-word;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
         }
 
         .user-message {
-            background-color: #e3f2fd;
-            text-align: right;
+            background-color: #1a2a6c;
+            color: white;
+            align-self: flex-end;
+            border-bottom-right-radius: 5px;
         }
 
         .bot-message {
-            background-color: #f5f5f5;
+            background-color: #e3f2fd;
+            align-self: flex-start;
+            border-bottom-left-radius: 5px;
+        }
+
+        .input-area {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        #user-input {
+            flex: 1;
+            padding: 15px;
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+
+        #user-input:focus {
+            outline: none;
+            border-color: #4a6491;
+            box-shadow: 0 0 0 3px rgba(74, 100, 145, 0.2);
+        }
+
+        #send-btn {
+            background-color: #1a2a6c;
+            color: white;
+            border: none;
+            padding: 0 30px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 16px;
+            transition: background-color 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        #send-btn:hover {
+            background-color: #0f1a4a;
+        }
+
+        .error-message {
+            background-color: #f8d7da;
+            color: #721c24;
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin-top: 10px;
+            border-left: 5px solid #dc3545;
+            display: none;
+            font-size: 0.9rem;
+        }
+
+        .error-message.show {
+            display: block;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .loading.show {
+            display: block;
+        }
+
+        .spinner {
+            border: 3px solid rgba(0, 0, 0, 0.1);
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            border-left-color: #1a2a6c;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .message-header {
+            font-weight: 600;
+            margin-bottom: 5px;
+            font-size: 0.85rem;
+        }
+
+        .user-message .message-header {
+            color: rgba(255, 255, 255, 0.9);
+        }
+
+        .bot-message .message-header {
+            color: #1a2a6c;
+        }
+
+        .welcome-message {
+            text-align: center;
+            color: #6c757d;
+            padding: 40px 20px;
+            font-style: italic;
+        }
+
+        @media (max-width: 768px) {
+            #chat-container {
+                padding: 20px;
+                height: 95vh;
+            }
+            
+            .input-area {
+                flex-direction: column;
+            }
+            
+            #send-btn {
+                padding: 15px;
+                justify-content: center;
+            }
+            
+            .message {
+                max-width: 90%;
+            }
         }
     </style>
 </head>
 
 <body>
     <div id="chat-container">
-        <div id="messages"></div>
-        <div>
-            <input type="text" id="user-input" placeholder="输入您的问题..." style="width: 80%; padding: 10px;">
-            <button id="send-btn" style="padding: 10px 20px;">发送</button>
+        <div class="header">
+            <h1>
+                <i class="fas fa-robot"></i>
+                FastGPT Agent
+            </h1>
+            <div class="status-indicator">
+                <div class="status-dot" id="statusDot"></div>
+                <span id="statusText">未連接</span>
+            </div>
+        </div>
+
+        <div class="config-panel">
+            <h3><i class="fas fa-cog"></i> API配置</h3>
+            <div class="input-group">
+                <label>Cloudflare Worker代理URL</label>
+                <input type="text" id="proxyEndpoint" 
+                       value="https://fastgpt-proxy.akakikyoko1202.workers.dev"
+                       placeholder="輸入您的Cloudflare Worker URL">
+            </div>
+            <div class="input-group">
+                <label>FastGPT API端點</label>
+                <input type="text" id="apiEndpoint" 
+                       value="https://api.fastgpt.in/api"
+                       placeholder="輸入FastGPT API端點">
+            </div>
+            <div class="input-group api-key-container">
+                <label>API金鑰</label>
+                <input type="password" id="apiKey" 
+                       value="fastgpt-kFO2TbPdFhZPdBZNrg8gCDBiY9bBI43QZzaxpjYn8eGO6UhqfaorYfV2leJ"
+                       placeholder="輸入API金鑰">
+                <button type="button" class="toggle-password" id="togglePassword">
+                    <i class="fas fa-eye"></i>
+                </button>
+            </div>
+            <button class="test-button" id="testConnectionBtn">
+                <i class="fas fa-plug"></i> 測試連接
+            </button>
+        </div>
+
+        <div id="messages">
+            <div class="welcome-message">
+                <i class="fas fa-comments" style="font-size: 48px; margin-bottom: 15px; opacity: 0.3;"></i>
+                <h3>FastGPT對話助手</h3>
+                <p>配置完成後，輸入消息開始對話</p>
+            </div>
+        </div>
+
+        <div class="error-message" id="errorMessage">
+            <div id="errorText"></div>
+        </div>
+
+        <div class="loading" id="loadingIndicator">
+            <div class="spinner"></div>
+            <div>正在處理...</div>
+        </div>
+
+        <div class="input-area">
+            <input type="text" id="user-input" placeholder="輸入您的問題...">
+            <button id="send-btn">
+                <i class="fas fa-paper-plane"></i> 發送
+            </button>
         </div>
     </div>
 
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
     <script>
-        const API_URL = 'https://api.fastgpt.in/api'; // 替换为你的API地址
-        const API_KEY = 'fastgpt-kFO2TbPdFhZPdBZNrg8gCDBiY9bBI43QZzaxpjYn8eGO6UhqfaorYfV2leJ'; // 你的API密钥
+        // 配置
+        let config = {
+            proxyEndpoint: 'https://fastgpt-proxy.akakikyoko1202.workers.dev',
+            apiEndpoint: 'https://api.fastgpt.in/api',
+            apiKey: 'fastgpt-kFO2TbPdFhZPdBZNrg8gCDBiY9bBI43QZzaxpjYn8eGO6UhqfaorYfV2leJ',
+            model: "fastgpt-model",
+            isConnected: false
+        };
 
-        async function sendMessage() {
-            const input = document.getElementById('user-input');
-            const message = input.value.trim();
+        // DOM元素
+        const elements = {
+            proxyEndpoint: document.getElementById('proxyEndpoint'),
+            apiEndpoint: document.getElementById('apiEndpoint'),
+            apiKey: document.getElementById('apiKey'),
+            togglePassword: document.getElementById('togglePassword'),
+            testConnectionBtn: document.getElementById('testConnectionBtn'),
+            userInput: document.getElementById('user-input'),
+            sendBtn: document.getElementById('send-btn'),
+            messages: document.getElementById('messages'),
+            errorMessage: document.getElementById('errorMessage'),
+            errorText: document.getElementById('errorText'),
+            loadingIndicator: document.getElementById('loadingIndicator'),
+            statusDot: document.getElementById('statusDot'),
+            statusText: document.getElementById('statusText')
+        };
 
-            if (!message) return;
+        // 初始化
+        function init() {
+            loadConfig();
+            setupEventListeners();
+            updateStatus();
+        }
 
-            // 显示用户消息
-            displayMessage(message, 'user');
-            input.value = '';
-
-            try {
-                // 调用FastGPT API
-                const response = await fetch(`${API_URL}/chat/completions`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${API_KEY}`
-                    },
-                    body: JSON.stringify({
-                        model: "fastgpt-model", // 你的模型名称
-                        messages: [
-                            {
-                                role: "user",
-                                content: message
-                            }
-                        ],
-                        stream: false // 或 true 用于流式响应
-                    })
-                });
-
-                const data = await response.json();
-
-                // 显示AI回复
-                if (data.choices && data.choices[0]) {
-                    displayMessage(data.choices[0].message.content, 'bot');
+        // 加載配置
+        function loadConfig() {
+            const savedConfig = localStorage.getItem('fastgpt_chat_config');
+            if (savedConfig) {
+                try {
+                    const parsed = JSON.parse(savedConfig);
+                    config = { ...config, ...parsed };
+                    
+                    // 更新表單
+                    elements.proxyEndpoint.value = config.proxyEndpoint;
+                    elements.apiEndpoint.value = config.apiEndpoint;
+                    elements.apiKey.value = config.apiKey;
+                } catch (error) {
+                    console.error('加載配置失敗:', error);
                 }
-            } catch (error) {
-                console.error('Error:', error);
-                displayMessage('抱歉，出现了错误。', 'bot');
             }
         }
 
-        function displayMessage(content, sender) {
-            const messagesDiv = document.getElementById('messages');
-            const messageDiv = document.createElement('div');
-            messageDiv.className = `message ${sender}-message`;
-            messageDiv.textContent = content;
-            messagesDiv.appendChild(messageDiv);
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        // 保存配置
+        function saveConfig() {
+            config.proxyEndpoint = elements.proxyEndpoint.value.trim();
+            config.apiEndpoint = elements.apiEndpoint.value.trim();
+            config.apiKey = elements.apiKey.value.trim();
+            
+            localStorage.setItem('fastgpt_chat_config', JSON.stringify(config));
+            console.log('配置已保存');
         }
 
-        // 事件监听
-        document.getElementById('send-btn').addEventListener('click', sendMessage);
-        document.getElementById('user-input').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') sendMessage();
+        // 設置事件監聽器
+        function setupEventListeners() {
+            // 顯示/隱藏密碼
+            elements.togglePassword.addEventListener('click', function() {
+                const type = elements.apiKey.type === 'password' ? 'text' : 'password';
+                elements.apiKey.type = type;
+                this.innerHTML = type === 'password' ? '<i class="fas fa-eye"></i>' : '<i class="fas fa-eye-slash"></i>';
+            });
+
+            // 測試連接
+            elements.testConnectionBtn.addEventListener('click', testConnection);
+
+            // 發送消息
+            elements.sendBtn.addEventListener('click', sendMessage);
+            elements.userInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') sendMessage();
+            });
+
+            // 自動保存配置
+            elements.proxyEndpoint.addEventListener('change', saveConfig);
+            elements.apiEndpoint.addEventListener('change', saveConfig);
+            elements.apiKey.addEventListener('change', saveConfig);
+        }
+
+        // 更新狀態顯示
+        function updateStatus() {
+            if (config.isConnected) {
+                elements.statusDot.className = 'status-dot connected';
+                elements.statusText.textContent = '已連接';
+            } else {
+                elements.statusDot.className = 'status-dot';
+                elements.statusText.textContent = '未連接';
+            }
+        }
+
+        // 顯示錯誤
+        function showError(message) {
+            elements.errorText.textContent = message;
+            elements.errorMessage.classList.add('show');
+            
+            // 5秒後自動隱藏錯誤
+            setTimeout(() => {
+                elements.errorMessage.classList.remove('show');
+            }, 5000);
+        }
+
+        // 隱藏錯誤
+        function hideError() {
+            elements.errorMessage.classList.remove('show');
+        }
+
+        // 顯示加載
+        function showLoading() {
+            elements.loadingIndicator.classList.add('show');
+        }
+
+        // 隱藏加載
+        function hideLoading() {
+            elements.loadingIndicator.classList.remove('show');
+        }
+
+        // 構建代理URL
+        function buildProxyUrl(targetUrl) {
+            const proxy = config.proxyEndpoint.trim();
+            if (!proxy) return targetUrl;
+            
+            // Cloudflare Worker代理格式: https://worker-url?url=ENCODED_TARGET_URL
+            return `${proxy}?url=${encodeURIComponent(targetUrl)}`;
+        }
+
+        // 測試連接
+        async function testConnection() {
+            // 保存當前配置
+            saveConfig();
+            
+            if (!config.proxyEndpoint) {
+                showError('請輸入Cloudflare Worker代理URL');
+                return;
+            }
+            
+            if (!config.apiEndpoint) {
+                showError('請輸入FastGPT API端點');
+                return;
+            }
+            
+            if (!config.apiKey) {
+                showError('請輸入API金鑰');
+                return;
+            }
+            
+            showLoading();
+            hideError();
+            
+            try {
+                // 首先測試Worker本身
+                const testUrl = `${config.proxyEndpoint}/test`;
+                const testResponse = await fetch(testUrl);
+                
+                if (!testResponse.ok) {
+                    throw new Error(`Worker測試失敗: ${testResponse.status}`);
+                }
+                
+                // 測試完整的API請求
+                const requestData = {
+                    model: config.model,
+                    messages: [
+                        {
+                            role: "user",
+                            content: "測試連接，請簡單回應"
+                        }
+                    ],
+                    stream: false
+                };
+                
+                // 構建代理URL
+                const apiUrl = `${config.apiEndpoint}/chat/completions`;
+                const proxyUrl = buildProxyUrl(apiUrl);
+                
+                console.log('測試請求URL:', proxyUrl);
+                
+                const response = await fetch(proxyUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${config.apiKey}`
+                    },
+                    body: JSON.stringify(requestData)
+                });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`API測試失敗: ${response.status} - ${errorText.substring(0, 100)}`);
+                }
+                
+                const data = await response.json();
+                
+                if (data.choices && data.choices[0]) {
+                    config.isConnected = true;
+                    updateStatus();
+                    hideLoading();
+                    
+                    // 顯示測試成功的消息
+                    addMessage('bot', '連接測試成功！FastGPT API 正常工作。');
+                    
+                    console.log('連接測試成功:', data);
+                } else {
+                    throw new Error('API回應格式不正確');
+                }
+                
+            } catch (error) {
+                hideLoading();
+                config.isConnected = false;
+                updateStatus();
+                showError(`連接測試失敗: ${error.message}`);
+                console.error('連接錯誤:', error);
+            }
+        }
+
+        // 發送消息
+        async function sendMessage() {
+            const message = elements.userInput.value.trim();
+            
+            if (!message) {
+                showError('請輸入消息');
+                return;
+            }
+            
+            if (!config.isConnected) {
+                showError('請先測試連接，確保配置正確');
+                return;
+            }
+            
+            // 顯示用戶消息
+            addMessage('user', message);
+            elements.userInput.value = '';
+            
+            showLoading();
+            hideError();
+            
+            try {
+                // 構建請求數據
+                const requestData = {
+                    model: config.model,
+                    messages: [
+                        {
+                            role: "user",
+                            content: message
+                        }
+                    ],
+                    stream: false
+                };
+                
+                // 構建代理URL
+                const apiUrl = `${config.apiEndpoint}/chat/completions`;
+                const proxyUrl = buildProxyUrl(apiUrl);
+                
+                console.log('發送請求到:', proxyUrl);
+                
+                // 發送請求
+                const response = await fetch(proxyUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${config.apiKey}`
+                    },
+                    body: JSON.stringify(requestData)
+                });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`API請求失敗: ${response.status} - ${errorText.substring(0, 200)}`);
+                }
+                
+                const data = await response.json();
+                
+                hideLoading();
+                
+                // 顯示AI回復
+                if (data.choices && data.choices[0] && data.choices[0].message) {
+                    addMessage('bot', data.choices[0].message.content);
+                } else {
+                    throw new Error('API回應格式不正確');
+                }
+                
+            } catch (error) {
+                hideLoading();
+                showError(`請求失敗: ${error.message}`);
+                addMessage('bot', '抱歉，處理您的請求時出現錯誤。');
+                console.error('API錯誤:', error);
+            }
+        }
+
+        // 添加消息到聊天
+        function addMessage(sender, content) {
+            // 如果是第一條消息，清空歡迎信息
+            const welcomeMessage = elements.messages.querySelector('.welcome-message');
+            if (welcomeMessage) {
+                welcomeMessage.remove();
+            }
+            
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${sender}-message`;
+            
+            const headerDiv = document.createElement('div');
+            headerDiv.className = 'message-header';
+            headerDiv.textContent = sender === 'user' ? '您' : 'FastGPT助手';
+            
+            const contentDiv = document.createElement('div');
+            contentDiv.textContent = content;
+            
+            messageDiv.appendChild(headerDiv);
+            messageDiv.appendChild(contentDiv);
+            elements.messages.appendChild(messageDiv);
+            
+            // 滾動到底部
+            elements.messages.scrollTop = elements.messages.scrollHeight;
+        }
+
+        // 初始化應用
+        init();
+        
+        // 自動測試連接（如果已有配置）
+        window.addEventListener('load', function() {
+            setTimeout(() => {
+                if (config.proxyEndpoint && config.apiEndpoint && config.apiKey) {
+                    testConnection();
+                }
+            }, 1000);
         });
     </script>
 </body>
