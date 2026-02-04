@@ -1219,8 +1219,288 @@
             </div>
         </div>
         <div id="aiChat" class="page">
-            <h1>AI對話</h1>
-            <p>此頁面尚未確定內容。</p>
+            <style>
+                .ai-chat-header {
+                    text-align: center;
+                    margin-bottom: 20px;
+                    padding: 20px;
+                    background-color: rgba(255, 255, 255, 0.9);
+                    border-radius: 12px;
+                    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+                }
+
+                .ai-chat-header h2 {
+                    color: #2c3e50;
+                    margin-bottom: 8px;
+                    font-size: 2rem;
+                }
+
+                .ai-chat-header p {
+                    color: #546e7a;
+                    font-size: 1rem;
+                    max-width: 800px;
+                    margin: 0 auto;
+                    line-height: 1.6;
+                }
+
+                .ai-chat-container {
+                    display: flex;
+                    flex-direction: column;
+                    flex: 1;
+                    background-color: rgba(255, 255, 255, 0.9);
+                    border-radius: 12px;
+                    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
+                    overflow: hidden;
+                    min-height: 600px;
+                }
+
+                .iframe-container {
+                    flex: 1;
+                    position: relative;
+                    min-height: 600px;
+                }
+
+                .iframe-container iframe {
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    border: none;
+                }
+
+                .loading-overlay {
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    background-color: #f8f9fa;
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: center;
+                    align-items: center;
+                    z-index: 10;
+                    transition: opacity 0.3s ease;
+                }
+
+                .loading-spinner {
+                    width: 50px;
+                    height: 50px;
+                    border: 5px solid #e0e0e0;
+                    border-top: 5px solid #3498db;
+                    border-radius: 50%;
+                    animation: spin 1s linear infinite;
+                    margin-bottom: 20px;
+                }
+
+                @keyframes spin {
+                    0% {
+                        transform: rotate(0deg);
+                    }
+
+                    100% {
+                        transform: rotate(360deg);
+                    }
+                }
+
+                .ai-chat-controls {
+                    padding: 15px 20px;
+                    background-color: #f8f9fa;
+                    border-top: 1px solid #eaeaea;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    flex-wrap: wrap;
+                    gap: 10px;
+                }
+
+                .info-text {
+                    color: #546e7a;
+                    font-size: 0.95rem;
+                }
+
+                .ai-chat-btn {
+                    padding: 10px 20px;
+                    background-color: #3498db;
+                    color: white;
+                    border: none;
+                    border-radius: 6px;
+                    cursor: pointer;
+                    font-weight: 600;
+                    transition: all 0.3s ease;
+                }
+
+                .ai-chat-btn:hover {
+                    background-color: #2980b9;
+                    transform: translateY(-2px);
+                    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+                }
+
+                .ai-chat-btn:active {
+                    transform: translateY(0);
+                }
+
+                .btn-refresh {
+                    background-color: #2ecc71;
+                }
+
+                .btn-refresh:hover {
+                    background-color: #27ae60;
+                }
+
+                .btn-fullscreen {
+                    background-color: #9b59b6;
+                }
+
+                .btn-fullscreen:hover {
+                    background-color: #8e44ad;
+                }
+
+                .ai-chat-footer {
+                    margin-top: 20px;
+                    text-align: center;
+                    color: #7f8c8d;
+                    font-size: 0.9rem;
+                    padding: 15px;
+                }
+
+                .ai-chat-footer a {
+                    color: #3498db;
+                    text-decoration: none;
+                }
+
+                .ai-chat-footer a:hover {
+                    text-decoration: underline;
+                }
+
+                .button-group {
+                    display: flex;
+                    gap: 10px;
+                    justify-content: flex-end;
+                }
+            </style>
+
+            <div class="ai-chat-header">
+                <h2>FastGPT聊天助手</h2>
+                <p>這是一個嵌入的FastGPT聊天界面，您可以直接在此頁面與AI助手對話。界面已優化適應，確保良好的使用體驗。</p>
+            </div>
+
+            <div class="ai-chat-container">
+                <div class="iframe-container">
+                    <div class="loading-overlay" id="loadingOverlay">
+                        <div class="loading-spinner"></div>
+                        <p>正在加載FastGPT聊天界面...</p>
+                    </div>
+                    <iframe id="fastgptIframe"
+                        src="https://cloud.fastgpt.io/chat/share?shareId=uxNyAoAdnEMT9HzPP5jioCug&showHistory=0"
+                        title="FastGPT聊天助手"></iframe>
+                </div>
+
+                <div class="ai-chat-controls">
+                    <div class="info-text">
+                        嵌入頁面: FastGPT聊天助手 | 歷史記錄: 隱藏
+                    </div>
+                    <div class="button-group">
+                        <button class="ai-chat-btn btn-refresh" id="refreshBtn">刷新頁面</button>
+                        <button class="ai-chat-btn btn-fullscreen" id="fullscreenBtn">全屏顯示</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="ai-chat-footer">
+                <p>本頁面使用iframe嵌入 <a href="https://cloud.fastgpt.io" target="_blank">FastGPT</a> 聊天界面 | 僅供演示使用</p>
+            </div>
+
+            <script>
+                document.addEventListener('DOMContentLoaded', function () {
+                    const iframe = document.getElementById('fastgptIframe');
+                    const loadingOverlay = document.getElementById('loadingOverlay');
+                    const refreshBtn = document.getElementById('refreshBtn');
+                    const fullscreenBtn = document.getElementById('fullscreenBtn');
+                    const container = document.querySelector('.ai-chat-container');
+
+                    // 當iframe加載完成後隱藏加載動畫
+                    if (iframe) {
+                        iframe.addEventListener('load', function () {
+                            setTimeout(() => {
+                                if (loadingOverlay) {
+                                    loadingOverlay.style.opacity = '0';
+                                    setTimeout(() => {
+                                        loadingOverlay.style.display = 'none';
+                                    }, 300);
+                                }
+                            }, 500); // 延遲500ms確保內容完全加載
+                        });
+                    }
+
+                    // 刷新按鈕功能
+                    if (refreshBtn) {
+                        refreshBtn.addEventListener('click', function () {
+                            if (loadingOverlay) {
+                                loadingOverlay.style.display = 'flex';
+                                loadingOverlay.style.opacity = '1';
+                            }
+                            if (iframe) {
+                                iframe.src = iframe.src; // 重新加載iframe
+                            }
+                        });
+                    }
+
+                    // 全屏功能
+                    if (fullscreenBtn) {
+                        fullscreenBtn.addEventListener('click', function () {
+                            if (!document.fullscreenElement) {
+                                if (container.requestFullscreen) {
+                                    container.requestFullscreen();
+                                } else if (container.webkitRequestFullscreen) {
+                                    container.webkitRequestFullscreen();
+                                } else if (container.msRequestFullscreen) {
+                                    container.msRequestFullscreen();
+                                }
+                                fullscreenBtn.textContent = '退出全屏';
+                            } else {
+                                if (document.exitFullscreen) {
+                                    document.exitFullscreen();
+                                } else if (document.webkitExitFullscreen) {
+                                    document.webkitExitFullscreen();
+                                } else if (document.msExitFullscreen) {
+                                    document.msExitFullscreen();
+                                }
+                                fullscreenBtn.textContent = '全屏顯示';
+                            }
+                        });
+                    }
+
+                    // 監聽全屏狀態變化
+                    document.addEventListener('fullscreenchange', handleFullscreenChange);
+                    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+                    document.addEventListener('msfullscreenchange', handleFullscreenChange);
+
+                    function handleFullscreenChange() {
+                        if (!document.fullscreenElement && !document.webkitFullscreenElement && !document.msFullscreenElement) {
+                            if (fullscreenBtn) {
+                                fullscreenBtn.textContent = '全屏顯示';
+                            }
+                        }
+                    }
+
+                    // 如果iframe加載失敗
+                    if (iframe) {
+                        iframe.addEventListener('error', function () {
+                            if (loadingOverlay) {
+                                loadingOverlay.innerHTML = `
+                                    <div style="text-align: center; color: #e74c3c;">
+                                        <h3>加載失敗</h3>
+                                        <p>無法加載FastGPT聊天界面，請檢查網絡連接或稍後重試。</p>
+                                        <button class="ai-chat-btn" style="margin-top: 15px;" onclick="location.reload()">重新加載</button>
+                                    </div>
+                                `;
+                            }
+                        });
+                    }
+                });
+            </script>
         </div>
         <div id="settings" class="page">
             <h1>基本設置</h1>
@@ -2606,7 +2886,7 @@
 
         // 獲取可用的GPIO選項（排除已使用的GPIO）
         function getAvailableGPIOPins() {
-            const allGPIOs = ['IO1', 'IO2', 'IO3'];
+            const allGPIOs = ['IO2', 'IO27', 'IO32'];
             const availableGPIOs = allGPIOs.filter(gpio => !usedGPIOs[gpio] && !Object.values(gpioConfig).some(config => config.pin === gpio));
             return availableGPIOs;
         }
