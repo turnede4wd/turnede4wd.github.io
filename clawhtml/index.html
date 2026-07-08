@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32-CAM 影像監控面板</title>
+    <style>
+        :root {
+            --bg-color: #f4f6f9;
+            --card-color: #ffffff;
+            --text-color: #333333;
+            --primary-color: #007bff;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: var(--bg-color);
+            color: var(--text-color);
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #2c3e50;
+        }
+
+        .gallery {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+        }
+
+        .image-card {
+            background: var(--card-color);
+            padding: 15px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .image-wrapper {
+            width: 100%;
+            height: 200px;
+            background: #e9ecef;
+            border-radius: 8px;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .image-card img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            /* 保持比例，不變形 */
+            background: #000;
+            /* 圖片黑底襯托 */
+        }
+
+        .time-tag {
+            margin-top: 12px;
+            font-size: 0.9em;
+            color: #666;
+            font-weight: 500;
+        }
+
+        /* 讀取中動畫 */
+        .loading {
+            grid-column: 1 / -1;
+            text-align: center;
+            padding: 40px;
+            font-size: 1.2em;
+            color: #666;
+        }
+
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border-left-color: var(--primary-color);
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>📷 ESP32-CAM 實時影像監控</h1>
+
+    <div id="gallery-container" class="gallery">
+        <div class="loading">
+            <div class="spinner"></div>
+            正在同步雲端影像...
+        </div>
+    </div>
+
+    <script>
+        // ⚠️ 請在此處替換成您正確的 Google Apps Script 網頁應用程式 URL
+        const apiUrl = "https://script.google.com/macros/s/AKfycbzdHttpfght2vCS99AYFnp_u2JVqSGwNC1YtRBkgpEy9xvhcXmL0G2xZGBg_vsnqUL-/exec";
+
+        async function fetchImages() {
+            try {
+                const response = await fetch(apiUrl);
+                const data = await response.json();
+                const container = document.getElementById('gallery-container');
+
+                if (data.length === 0) {
+                    container.innerHTML = '<div class="loading">目前資料庫中沒有影像。</div>';
+                    return;
+                }
+
+                container.innerHTML = ''; // 清空舊資料（包括 Loading 畫面）
+
+                // 將資料反轉（data.reverse()），讓最新拍到的照片排在網頁最前面
+                data.reverse().forEach(item => {
+                    // 過濾掉可能因為沒傳好造成的空資料
+                    if (!item.message || item.message.trim() === "") return;
+
+                    const card = document.createElement('div');
+                    card.className = 'image-card';
+
+                    // 核心重點：利用 Data URI 將 Base64 字串渲染為圖片
+                    // 若您的 ESP32 傳上來的字串已包含 "data:image/jpeg;base64,"，請將下行的開頭前綴刪除
+                    const imgSrc = `data:image/jpeg;base64,${item.message}`;
+
+                    card.innerHTML = `
+                        <div class="image-wrapper">
+                            <img src="${imgSrc}" alt="ESP32 Cam Image" onerror="this.onerror=null; this.parentElement.innerHTML='<span style=\'color:#99s;\'>圖片解析失敗</span>';">
+                        </div>
+                        <div class="time-tag">🕒 ${new Date(item.time).toLocaleString()}</div>
+                    `;
+                    container.appendChild(card);
+                });
+            } catch (error) {
+                console.error("讀取影像失敗:", error);
+                document.getElementById('gallery-container').innerHTML =
+                    `<div class="loading" style="color: red;">❌ 無法連線至 API，請檢查 URL 或網路設定。</div>`;
+            }
+        }
+
+        // 網頁載入時立刻讀取一次
+        fetchImages();
+
+        // 之後每 5 秒鐘自動重新抓取最新影像
+        setInterval(fetchImages, 5000);
+    </script>
+</body>
+
+</html>
