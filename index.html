@@ -84,7 +84,7 @@
 </head>
 <body>
     <h1>IMU 數據可視化</h1>
-    
+   
     <div class="controls">
         <button id="connectBtn">連接串口</button>
         <button id="disconnectBtn">斷開連接</button>
@@ -92,10 +92,9 @@
         <div id="status" class="disconnected">未連接</div>
         <div class="data-info">
             <p>串口設置: 115200 baud</p>
-            
         </div>
     </div>
-    
+   
     <div class="container">
         <div class="chart-container">
             <h2>加速度 (m/s²)</h2>
@@ -106,18 +105,17 @@
             <canvas id="gyroChart"></canvas>
         </div>
     </div>
-    
+   
     <div class="serial-monitor">
         <h2>串口輸入監視器</h2>
         <button id="clearSerialBtn" class="clear-btn">清除內容</button>
         <div class="serial-content" id="serialContent"></div>
         <button id="exportCsvButton">匯出 CSV</button>
     </div>
-
     <script>
         // 最大數據點數
         const MAX_DATA_POINTS = 500;
-        
+       
         // 初始化數據結構
         let data = {
             accelX: [],
@@ -128,29 +126,29 @@
             gyroZ: [],
             timestamps: []
         };
-        
+       
         // 緩存不完整的行
         let buffer = '';
-
         // 串口連接相關變量
         let port = null;
         let reader = null;
         let isReading = false;
-
         let readingData = [];
-        
+       
         let isSmoothingEnabled = true;
-        const smoothingAlpha = 0.28;  // Smoothing strength (0.1 = strong, 0.5 = light)
-
+        const smoothingAlpha = 0.28; // Smoothing strength (0.1 = strong, 0.5 = light)
         let smoothed = {
             accelX: 0, accelY: 0, accelZ: 0,
             gyroX: 0, gyroY: 0, gyroZ: 0
         };
 
+        // Runtime timer (starts on first valid data)
+        let startTime = null;
+
         // 初始化圖表
         const accelCtx = document.getElementById('accelChart').getContext('2d');
         const gyroCtx = document.getElementById('gyroChart').getContext('2d');
-        
+       
         const accelChart = new Chart(accelCtx, {
             type: 'line',
             data: {
@@ -195,7 +193,7 @@
                     x: {
                         title: {
                             display: true,
-                            text: '時間'
+                            text: '時間 (s)'
                         }
                     }
                 },
@@ -204,7 +202,7 @@
                 }
             }
         });
-        
+       
         const gyroChart = new Chart(gyroCtx, {
             type: 'line',
             data: {
@@ -249,7 +247,7 @@
                     x: {
                         title: {
                             display: true,
-                            text: '時間'
+                            text: '時間 (s)'
                         }
                     }
                 },
@@ -258,7 +256,7 @@
                 }
             }
         });
-        
+       
         // 更新圖表數據
         function updateCharts() {
             // 限制數據點數量
@@ -269,7 +267,7 @@
                 data.accelY.splice(0, removeCount);
                 data.accelZ.splice(0, removeCount);
             }
-            
+           
             // 更新加速度圖表
             accelChart.data.labels = data.timestamps.slice(-MAX_DATA_POINTS);
             accelChart.data.datasets[0].data = data.accelX.slice(-MAX_DATA_POINTS);
@@ -277,7 +275,6 @@
             accelChart.data.datasets[2].data = data.accelZ.slice(-MAX_DATA_POINTS);
             accelChart.update('none');
         }
-
         function updateCharts2() {
             // 限制數據點數量
             if (data.gyroX.length > MAX_DATA_POINTS) {
@@ -287,7 +284,7 @@
                 data.gyroY.splice(0, removeCount);
                 data.gyroZ.splice(0, removeCount);
             }
-            
+           
             // 更新陀螺儀圖表
             gyroChart.data.labels = data.timestamps.slice(-MAX_DATA_POINTS);
             gyroChart.data.datasets[0].data = data.gyroX.slice(-MAX_DATA_POINTS);
@@ -295,132 +292,157 @@
             gyroChart.data.datasets[2].data = data.gyroZ.slice(-MAX_DATA_POINTS);
             gyroChart.update('none');
         }
-        
-       const MAX_LINES = 100; // 最大行数
-// Toggle Smoothing Button
+
+        // Reset everything (called on disconnect)
+        function resetDataAndCharts() {
+            startTime = null;
+            data = {
+                accelX: [],
+                accelY: [],
+                accelZ: [],
+                gyroX: [],
+                gyroY: [],
+                gyroZ: [],
+                timestamps: []
+            };
+            readingData = [];
+            buffer = '';
+            smoothed = {
+                accelX: 0, accelY: 0, accelZ: 0,
+                gyroX: 0, gyroY: 0, gyroZ: 0
+            };
+
+            // Clear charts
+            accelChart.data.labels = [];
+            accelChart.data.datasets.forEach(ds => ds.data = []);
+            accelChart.update('none');
+
+            gyroChart.data.labels = [];
+            gyroChart.data.datasets.forEach(ds => ds.data = []);
+            gyroChart.update('none');
+        }
+       
+        const MAX_LINES = 100; // 最大行数
+
+        // Toggle Smoothing Button
         document.getElementById('toggleSmoothingBtn').addEventListener('click', () => {
             isSmoothingEnabled = !isSmoothingEnabled;
             const btn = document.getElementById('toggleSmoothingBtn');
             btn.textContent = isSmoothingEnabled ? '平滑濾波：開啟' : '平滑濾波：關閉';
         });
 
-// 显示串口数据到监视器
-function appendToSerialMonitor(text) {
-    const serialContent = document.getElementById('serialContent');
-    
-    // 添加新行到监视器
-    serialContent.textContent += text;
+        // 显示串口数据到监视器
+        function appendToSerialMonitor(text) {
+            const serialContent = document.getElementById('serialContent');
+           
+            // 添加新行到监视器
+            serialContent.textContent += text;
+            // 保留最近 50 行
+            const lines = serialContent.textContent.split('\n');
+            if (lines.length > MAX_LINES) {
+                serialContent.textContent = lines.slice(lines.length - MAX_LINES).join('\n');
+            }
+            // 自动滚动到底部
+            serialContent.scrollTop = serialContent.scrollHeight;
+        }
 
-    // 保留最近 50 行
-    const lines = serialContent.textContent.split('\n');
-    if (lines.length > MAX_LINES) {
-        serialContent.textContent = lines.slice(lines.length - MAX_LINES).join('\n');
-    }
+        // 定时清理网页缓存（每60秒清理一次）
+        setInterval(() => {
+            if ('caches' in window) {
+                caches.keys().then(cacheNames => {
+                    cacheNames.forEach(cacheName => {
+                        caches.delete(cacheName);
+                    });
+                });
+                console.log('网页缓存已清理！');
+            }
+        }, 60000); // 60000 毫秒 = 60 秒
 
-    // 自动滚动到底部
-    serialContent.scrollTop = serialContent.scrollHeight;
-}
+        function calculateAverage(property) {
+            if (readingData.length === 0) return 0;
+            const sum = readingData.reduce((acc, item) => acc + item[property], 0);
+            return sum / readingData.length;
+        }
 
-// 定时清理网页缓存（每60秒清理一次）
-setInterval(() => {
-    if ('caches' in window) {
-        caches.keys().then(cacheNames => {
-            cacheNames.forEach(cacheName => {
-                caches.delete(cacheName);
-            });
-        });
-        console.log('网页缓存已清理！');
-    }
-}, 60000); // 60000 毫秒 = 60 秒
+        function parseSerialData(text) {
+            appendToSerialMonitor(text);
+            buffer += text;
+            if (buffer.includes('------')) {
+                const groups = buffer.split(/------+/);
+                buffer = groups.pop();
+                for (const group of groups) {
+                    const values = group.split(/[\n\s,;]+/)
+                                        .filter(item => item.trim() !== '')
+                                        .map(item => parseFloat(item))
+                                        .filter(num => !isNaN(num));
+                    if (values.length >= 6) {
+                        // Start timer on first valid packet
+                        if (startTime === null) {
+                            startTime = performance.now();
+                        }
 
-function calculateAverage(property) {
-    if (readingData.length === 0) return 0;
-    const sum = readingData.reduce((acc, item) => acc + item[property], 0);
-    return sum / readingData.length;
-}
+                        const [rawAX, rawAY, rawAZ, rawGX, rawGY, rawGZ] = values.slice(0, 6);
+                        readingData.push({ accelX: rawAX, accelY: rawAY, accelZ: rawAZ,
+                                            gyroX: rawGX, gyroY: rawGY, gyroZ: rawGZ });
+                        if (readingData.length > 5) readingData.shift();
 
+                        // Elapsed time in seconds with 3 decimal places
+                        const elapsedSec = ((performance.now() - startTime) / 1000).toFixed(3);
 
-    function parseSerialData(text) {
-        appendToSerialMonitor(text);
-        buffer += text;
+                        // Calculate scaled averages
+                        let accelX = calculateAverage('accelX') * 0.00980665;
+                        let accelY = calculateAverage('accelY') * 0.00980665;
+                        let accelZ = calculateAverage('accelZ') * 0.00980665;
+                        let gyroX = calculateAverage('gyroX') * 0.001;
+                        let gyroY = calculateAverage('gyroY') * 0.001;
+                        let gyroZ = calculateAverage('gyroZ') * 0.001;
 
-        if (buffer.includes('------')) {
-            const groups = buffer.split(/------+/);
-            buffer = groups.pop();
+                        // Apply Exponential Moving Average (EMA) if smoothing is enabled
+                        if (isSmoothingEnabled) {
+                            smoothed.accelX = smoothed.accelX * (1 - smoothingAlpha) + accelX * smoothingAlpha;
+                            smoothed.accelY = smoothed.accelY * (1 - smoothingAlpha) + accelY * smoothingAlpha;
+                            smoothed.accelZ = smoothed.accelZ * (1 - smoothingAlpha) + accelZ * smoothingAlpha;
+                            smoothed.gyroX = smoothed.gyroX * (1 - smoothingAlpha) + gyroX * smoothingAlpha;
+                            smoothed.gyroY = smoothed.gyroY * (1 - smoothingAlpha) + gyroY * smoothingAlpha;
+                            smoothed.gyroZ = smoothed.gyroZ * (1 - smoothingAlpha) + gyroZ * smoothingAlpha;
+                            data.accelX.push(smoothed.accelX);
+                            data.accelY.push(smoothed.accelY);
+                            data.accelZ.push(smoothed.accelZ);
+                            data.gyroX.push(smoothed.gyroX);
+                            data.gyroY.push(smoothed.gyroY);
+                            data.gyroZ.push(smoothed.gyroZ);
+                        } else {
+                            data.accelX.push(accelX);
+                            data.accelY.push(accelY);
+                            data.accelZ.push(accelZ);
+                            data.gyroX.push(gyroX);
+                            data.gyroY.push(gyroY);
+                            data.gyroZ.push(gyroZ);
+                        }
+                        data.timestamps.push(elapsedSec);
 
-            for (const group of groups) {
-                const values = group.split(/[\n\s,;]+/)
-                                    .filter(item => item.trim() !== '')
-                                    .map(item => parseFloat(item))
-                                    .filter(num => !isNaN(num));
-
-                if (values.length >= 6) {
-                    const [rawAX, rawAY, rawAZ, rawGX, rawGY, rawGZ] = values.slice(0, 6);
-
-                    readingData.push({ accelX: rawAX, accelY: rawAY, accelZ: rawAZ, 
-                                        gyroX: rawGX, gyroY: rawGY, gyroZ: rawGZ });
-
-                    if (readingData.length > 5) readingData.shift();
-
-                    const timestamp = new Date().toLocaleTimeString();
-
-                    // Calculate scaled averages
-                    let accelX = calculateAverage('accelX') * 0.00980665;
-                    let accelY = calculateAverage('accelY') * 0.00980665;
-                    let accelZ = calculateAverage('accelZ') * 0.00980665;
-                    let gyroX = calculateAverage('gyroX') * 0.001;
-                    let gyroY = calculateAverage('gyroY') * 0.001;
-                    let gyroZ = calculateAverage('gyroZ') * 0.001;
-
-                    // Apply Exponential Moving Average (EMA) if smoothing is enabled
-                    if (isSmoothingEnabled) {
-                        smoothed.accelX = smoothed.accelX * (1 - smoothingAlpha) + accelX * smoothingAlpha;
-                        smoothed.accelY = smoothed.accelY * (1 - smoothingAlpha) + accelY * smoothingAlpha;
-                        smoothed.accelZ = smoothed.accelZ * (1 - smoothingAlpha) + accelZ * smoothingAlpha;
-                        smoothed.gyroX = smoothed.gyroX * (1 - smoothingAlpha) + gyroX * smoothingAlpha;
-                        smoothed.gyroY = smoothed.gyroY * (1 - smoothingAlpha) + gyroY * smoothingAlpha;
-                        smoothed.gyroZ = smoothed.gyroZ * (1 - smoothingAlpha) + gyroZ * smoothingAlpha;
-
-                        data.accelX.push(smoothed.accelX);
-                        data.accelY.push(smoothed.accelY);
-                        data.accelZ.push(smoothed.accelZ);
-                        data.gyroX.push(smoothed.gyroX);
-                        data.gyroY.push(smoothed.gyroY);
-                        data.gyroZ.push(smoothed.gyroZ);
-                    } else {
-                        data.accelX.push(accelX);
-                        data.accelY.push(accelY);
-                        data.accelZ.push(accelZ);
-                        data.gyroX.push(gyroX);
-                        data.gyroY.push(gyroY);
-                        data.gyroZ.push(gyroZ);
+                        // Limit data points
+                        if (data.accelX.length > MAX_DATA_POINTS) {
+                            data.accelX.shift(); data.accelY.shift(); data.accelZ.shift();
+                            data.gyroX.shift(); data.gyroY.shift(); data.gyroZ.shift();
+                            data.timestamps.shift();
+                        }
+                        updateCharts();
+                        updateCharts2();
                     }
-
-                    data.timestamps.push(timestamp);
-
-                    // Limit data points
-                    if (data.accelX.length > MAX_DATA_POINTS) {
-                        data.accelX.shift(); data.accelY.shift(); data.accelZ.shift();
-                        data.gyroX.shift(); data.gyroY.shift(); data.gyroZ.shift();
-                        data.timestamps.shift();
-                    }
-
-                    updateCharts();
-                    updateCharts2();
                 }
             }
         }
-    }
 
         // Function to export data to CSV
         function exportToCsv() {
             // Define CSV headers
-            const headers = ['Timestamp', 'AccelX', 'AccelY', 'AccelZ', 'GyroX', 'GyroY', 'GyroZ'];
-            
+            const headers = ['Timestamp (s)', 'AccelX', 'AccelY', 'AccelZ', 'GyroX', 'GyroY', 'GyroZ'];
+           
             // Combine data into rows
             const rows = data.timestamps.map((timestamp, index) => {
                 return [
-                    `"${timestamp}"`, // Enclose timestamp in quotes to handle commas
+                    timestamp,
                     data.accelX[index],
                     data.accelY[index],
                     data.accelZ[index],
@@ -429,14 +451,14 @@ function calculateAverage(property) {
                     data.gyroZ[index]
                 ].join(',');
             });
-            
+           
             // Create CSV content
             const csvContent = [headers.join(','), ...rows].join('\n');
-            
+           
             // Create a Blob for download
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
-            
+           
             // Create a temporary link to trigger download
             const link = document.createElement('a');
             link.setAttribute('href', url);
@@ -446,7 +468,7 @@ function calculateAverage(property) {
             document.body.removeChild(link);
             URL.revokeObjectURL(url);
         }
-        
+       
         // 讀取串口數據
         async function readSerialData() {
             try {
@@ -456,7 +478,7 @@ function calculateAverage(property) {
                         console.log('串口讀取完成');
                         break;
                     }
-                    
+                   
                     // 將接收到的數據轉換為文本
                     const text = new TextDecoder().decode(value);
                     parseSerialData(text);
@@ -466,7 +488,7 @@ function calculateAverage(property) {
                 document.getElementById('status').textContent = '讀取錯誤: ' + error.message;
                 document.getElementById('status').className = 'disconnected';
                 isReading = false;
-                
+               
                 // 嘗試重新連接
                 if (port) {
                     setTimeout(() => {
@@ -477,37 +499,37 @@ function calculateAverage(property) {
                     }, 1000);
                 }
             }
-            
+           
             if (reader) {
                 reader.releaseLock();
             }
         }
-        
+       
         // 連接串口
         document.getElementById('connectBtn').addEventListener('click', async () => {
             try {
                 port = await navigator.serial.requestPort();
                 await port.open({ baudRate: 115200 });
-                
+               
                 reader = port.readable.getReader();
                 isReading = true;
-                
+               
                 document.getElementById('status').textContent = '已連接';
                 document.getElementById('status').className = 'connected';
-                
+               
                 readSerialData();
-                
+               
             } catch (error) {
                 console.error('串口連接錯誤:', error);
                 document.getElementById('status').textContent = '連接錯誤: ' + error.message;
                 document.getElementById('status').className = 'disconnected';
             }
         });
-        
+       
         // 斷開串口連接
         document.getElementById('disconnectBtn').addEventListener('click', async () => {
             isReading = false;
-            
+           
             if (reader) {
                 try {
                     await reader.cancel();
@@ -517,7 +539,7 @@ function calculateAverage(property) {
                 reader.releaseLock();
                 reader = null;
             }
-            
+           
             if (port) {
                 try {
                     await port.close();
@@ -526,13 +548,16 @@ function calculateAverage(property) {
                 }
                 port = null;
             }
-            
+           
+            // Reset timer and graphs
+            resetDataAndCharts();
+
             document.getElementById('status').textContent = '未連接';
             document.getElementById('status').className = 'disconnected';
         });
 
         document.getElementById('exportCsvButton').addEventListener('click', exportToCsv);
-        
+       
         // 清除串口監視器內容
         document.getElementById('clearSerialBtn').addEventListener('click', () => {
             document.getElementById('serialContent').textContent = '';
