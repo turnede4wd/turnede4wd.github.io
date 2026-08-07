@@ -611,70 +611,142 @@
             return sum / readingData.length;
         }
 
+        // function parseSerialData(text) {
+        //     appendToSerialMonitor(text);
+        //     buffer += text;
+        //     if (buffer.includes('------')) {
+        //         const groups = buffer.split(/------+/);
+        //         buffer = groups.pop();
+        //         for (const group of groups) {
+        //             const values = group.split(/[\n\s,;]+/)
+        //                                 .filter(item => item.trim() !== '')
+        //                                 .map(item => parseFloat(item))
+        //                                 .filter(num => !isNaN(num));
+        //             if (values.length >= 6) {
+        //                 // Only store data when recording is ON
+        //                 if (!isRecording) continue;
+
+        //                 if (startTime === null) {
+        //                     startTime = performance.now();
+        //                 }
+
+        //                 const [rawAX, rawAY, rawAZ, rawGX, rawGY, rawGZ] = values.slice(0, 6);
+        //                 readingData.push({ accelX: rawAX, accelY: rawAY, accelZ: rawAZ,
+        //                                     gyroX: rawGX, gyroY: rawGY, gyroZ: rawGZ });
+        //                 if (readingData.length > 5) readingData.shift();
+
+        //                 const elapsedSec = ((performance.now() - startTime) / 1000).toFixed(3);
+
+        //                 let accelX = calculateAverage('accelX') * 0.00980665;
+        //                 let accelY = calculateAverage('accelY') * 0.00980665;
+        //                 let accelZ = calculateAverage('accelZ') * 0.00980665;
+        //                 let gyroX = calculateAverage('gyroX') * 0.001;
+        //                 let gyroY = calculateAverage('gyroY') * 0.001;
+        //                 let gyroZ = calculateAverage('gyroZ') * 0.001;
+
+        //                 if (isSmoothingEnabled) {
+        //                     smoothed.accelX = smoothed.accelX * (1 - smoothingAlpha) + accelX * smoothingAlpha;
+        //                     smoothed.accelY = smoothed.accelY * (1 - smoothingAlpha) + accelY * smoothingAlpha;
+        //                     smoothed.accelZ = smoothed.accelZ * (1 - smoothingAlpha) + accelZ * smoothingAlpha;
+        //                     smoothed.gyroX = smoothed.gyroX * (1 - smoothingAlpha) + gyroX * smoothingAlpha;
+        //                     smoothed.gyroY = smoothed.gyroY * (1 - smoothingAlpha) + gyroY * smoothingAlpha;
+        //                     smoothed.gyroZ = smoothed.gyroZ * (1 - smoothingAlpha) + gyroZ * smoothingAlpha;
+        //                     data.accelX.push(smoothed.accelX);
+        //                     data.accelY.push(smoothed.accelY);
+        //                     data.accelZ.push(smoothed.accelZ);
+        //                     data.gyroX.push(smoothed.gyroX);
+        //                     data.gyroY.push(smoothed.gyroY);
+        //                     data.gyroZ.push(smoothed.gyroZ);
+        //                 } else {
+        //                     data.accelX.push(accelX);
+        //                     data.accelY.push(accelY);
+        //                     data.accelZ.push(accelZ);
+        //                     data.gyroX.push(gyroX);
+        //                     data.gyroY.push(gyroY);
+        //                     data.gyroZ.push(gyroZ);
+        //                 }
+        //                 data.timestamps.push(elapsedSec);
+
+        //                 // No hard limit on the buffer size – charts only show last 500
+        //                 updateCharts();
+        //                 updateCharts2();
+        //             }
+        //         }
+        //     }
+        // }
         function parseSerialData(text) {
             appendToSerialMonitor(text);
             buffer += text;
-            if (buffer.includes('------')) {
-                const groups = buffer.split(/------+/);
-                buffer = groups.pop();
-                for (const group of groups) {
-                    const values = group.split(/[\n\s,;]+/)
-                                        .filter(item => item.trim() !== '')
-                                        .map(item => parseFloat(item))
-                                        .filter(num => !isNaN(num));
-                    if (values.length >= 6) {
-                        // Only store data when recording is ON
-                        if (!isRecording) continue;
 
-                        if (startTime === null) {
-                            startTime = performance.now();
-                        }
+            // Process complete lines
+            let lines = buffer.split('\n');
+            buffer = lines.pop();           // keep incomplete line in buffer
 
-                        const [rawAX, rawAY, rawAZ, rawGX, rawGY, rawGZ] = values.slice(0, 6);
-                        readingData.push({ accelX: rawAX, accelY: rawAY, accelZ: rawAZ,
-                                            gyroX: rawGX, gyroY: rawGY, gyroZ: rawGZ });
-                        if (readingData.length > 5) readingData.shift();
+            for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed) continue;
 
-                        const elapsedSec = ((performance.now() - startTime) / 1000).toFixed(3);
+                // Expected format: IMU,ax,ay,az,gx,gy,gz
+                const parts = trimmed.split(',');
+                if (parts.length < 7) continue;
+                if (parts[0].trim().toUpperCase() !== 'IMU') continue;
 
-                        let accelX = calculateAverage('accelX') * 0.00980665;
-                        let accelY = calculateAverage('accelY') * 0.00980665;
-                        let accelZ = calculateAverage('accelZ') * 0.00980665;
-                        let gyroX = calculateAverage('gyroX') * 0.001;
-                        let gyroY = calculateAverage('gyroY') * 0.001;
-                        let gyroZ = calculateAverage('gyroZ') * 0.001;
+                const values = parts.slice(1, 7).map(v => parseFloat(v.trim()));
+                if (values.some(v => isNaN(v))) continue;
 
-                        if (isSmoothingEnabled) {
-                            smoothed.accelX = smoothed.accelX * (1 - smoothingAlpha) + accelX * smoothingAlpha;
-                            smoothed.accelY = smoothed.accelY * (1 - smoothingAlpha) + accelY * smoothingAlpha;
-                            smoothed.accelZ = smoothed.accelZ * (1 - smoothingAlpha) + accelZ * smoothingAlpha;
-                            smoothed.gyroX = smoothed.gyroX * (1 - smoothingAlpha) + gyroX * smoothingAlpha;
-                            smoothed.gyroY = smoothed.gyroY * (1 - smoothingAlpha) + gyroY * smoothingAlpha;
-                            smoothed.gyroZ = smoothed.gyroZ * (1 - smoothingAlpha) + gyroZ * smoothingAlpha;
-                            data.accelX.push(smoothed.accelX);
-                            data.accelY.push(smoothed.accelY);
-                            data.accelZ.push(smoothed.accelZ);
-                            data.gyroX.push(smoothed.gyroX);
-                            data.gyroY.push(smoothed.gyroY);
-                            data.gyroZ.push(smoothed.gyroZ);
-                        } else {
-                            data.accelX.push(accelX);
-                            data.accelY.push(accelY);
-                            data.accelZ.push(accelZ);
-                            data.gyroX.push(gyroX);
-                            data.gyroY.push(gyroY);
-                            data.gyroZ.push(gyroZ);
-                        }
-                        data.timestamps.push(elapsedSec);
+                // Only store when recording is ON
+                if (!isRecording) continue;
 
-                        // No hard limit on the buffer size – charts only show last 500
-                        updateCharts();
-                        updateCharts2();
-                    }
+                if (startTime === null) {
+                    startTime = performance.now();
                 }
+
+                const [rawAX, rawAY, rawAZ, rawGX, rawGY, rawGZ] = values;
+
+                readingData.push({
+                    accelX: rawAX, accelY: rawAY, accelZ: rawAZ,
+                    gyroX: rawGX,  gyroY: rawGY,  gyroZ: rawGZ
+                });
+                if (readingData.length > 5) readingData.shift();
+
+                const elapsedSec = ((performance.now() - startTime) / 1000).toFixed(3);
+
+                let accelX = calculateAverage('accelX') * 0.00980665;
+                let accelY = calculateAverage('accelY') * 0.00980665;
+                let accelZ = calculateAverage('accelZ') * 0.00980665;
+                let gyroX  = calculateAverage('gyroX')  * 0.001;
+                let gyroY  = calculateAverage('gyroY')  * 0.001;
+                let gyroZ  = calculateAverage('gyroZ')  * 0.001;
+
+                if (isSmoothingEnabled) {
+                    smoothed.accelX = smoothed.accelX * (1 - smoothingAlpha) + accelX * smoothingAlpha;
+                    smoothed.accelY = smoothed.accelY * (1 - smoothingAlpha) + accelY * smoothingAlpha;
+                    smoothed.accelZ = smoothed.accelZ * (1 - smoothingAlpha) + accelZ * smoothingAlpha;
+                    smoothed.gyroX  = smoothed.gyroX  * (1 - smoothingAlpha) + gyroX  * smoothingAlpha;
+                    smoothed.gyroY  = smoothed.gyroY  * (1 - smoothingAlpha) + gyroY  * smoothingAlpha;
+                    smoothed.gyroZ  = smoothed.gyroZ  * (1 - smoothingAlpha) + gyroZ  * smoothingAlpha;
+
+                    data.accelX.push(smoothed.accelX);
+                    data.accelY.push(smoothed.accelY);
+                    data.accelZ.push(smoothed.accelZ);
+                    data.gyroX.push(smoothed.gyroX);
+                    data.gyroY.push(smoothed.gyroY);
+                    data.gyroZ.push(smoothed.gyroZ);
+                } else {
+                    data.accelX.push(accelX);
+                    data.accelY.push(accelY);
+                    data.accelZ.push(accelZ);
+                    data.gyroX.push(gyroX);
+                    data.gyroY.push(gyroY);
+                    data.gyroZ.push(gyroZ);
+                }
+
+                data.timestamps.push(elapsedSec);
+                updateCharts();
+                updateCharts2();
             }
         }
-
+        
         function exportToCsv() {
             if (data.timestamps.length === 0) {
                 alert('目前沒有可匯出的記錄資料');
