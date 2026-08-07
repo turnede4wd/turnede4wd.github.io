@@ -56,14 +56,9 @@
             border-radius: 4px;
             cursor: pointer;
             margin-right: 10px;
-            margin-bottom: 6px;
         }
         button:hover {
             background-color: #45a049;
-        }
-        button:disabled {
-            background-color: #cccccc;
-            cursor: not-allowed;
         }
         #status {
             margin-top: 10px;
@@ -85,61 +80,6 @@
         .toggle-btn:hover {
             background-color: #1976D2;
         }
-        .record-btn {
-            background-color: #ff9800;
-        }
-        .record-btn:hover {
-            background-color: #f57c00;
-        }
-        .record-btn.recording {
-            background-color: #e53935;
-        }
-        .record-btn.recording:hover {
-            background-color: #c62828;
-        }
-        .rec-indicator {
-            display: inline-block;
-            margin-left: 12px;
-            padding: 4px 10px;
-            border-radius: 4px;
-            font-weight: bold;
-            font-size: 14px;
-            vertical-align: middle;
-        }
-        .rec-on {
-            background-color: #ffebee;
-            color: #c62828;
-        }
-        .rec-off {
-            background-color: #eeeeee;
-            color: #757575;
-        }
-        .import-section {
-            margin-top: 30px;
-            padding: 15px;
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        .import-controls {
-            margin-bottom: 15px;
-        }
-        .file-list {
-            margin: 10px 0;
-            font-size: 14px;
-        }
-        .file-item {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin: 4px 0;
-        }
-        .section-title {
-            margin-top: 25px;
-            margin-bottom: 10px;
-            font-size: 1.3em;
-            color: #333;
-        }
     </style>
 </head>
 <body>
@@ -149,16 +89,12 @@
         <button id="connectBtn">連接串口</button>
         <button id="disconnectBtn">斷開連接</button>
         <button id="toggleSmoothingBtn" class="toggle-btn">平滑濾波：開啟</button>
-        <button id="recordBtn" class="record-btn">開始記錄</button>
-        <button id="clearRecordBtn" class="clear-btn">清除記錄</button>
-        <span id="recIndicator" class="rec-indicator rec-off">● 未記錄</span>
         <div id="status" class="disconnected">未連接</div>
         <div class="data-info">
             <p>串口設置: 115200 baud</p>
         </div>
     </div>
    
-    <h2 class="section-title">即時數據（來自記錄緩衝區，顯示最近 500 點）</h2>
     <div class="container">
         <div class="chart-container">
             <h2>加速度 (m/s²)</h2>
@@ -174,71 +110,42 @@
         <h2>串口輸入監視器</h2>
         <button id="clearSerialBtn" class="clear-btn">清除內容</button>
         <div class="serial-content" id="serialContent"></div>
-        <button id="exportCsvButton">匯出 CSV（完整記錄）</button>
+        <button id="exportCsvButton">匯出 CSV</button>
     </div>
-
-    <!-- ========== Imported CSV Comparison Section ========== -->
-    <div class="import-section">
-        <h2>CSV 數據比較</h2>
-        <div class="import-controls">
-            <input type="file" id="csvFileInput" accept=".csv" multiple style="display:none;">
-            <button id="importCsvBtn">匯入 CSV (最多 3 個)</button>
-            <button id="clearImportedBtn" class="clear-btn">清除已匯入數據</button>
-        </div>
-        <div class="file-list" id="importedFileList">
-            <!-- dynamically filled -->
-        </div>
-
-        <h2 class="section-title">匯入數據圖表</h2>
-        <div class="container">
-            <div class="chart-container">
-                <h2>加速度 (m/s²) - 匯入</h2>
-                <canvas id="importAccelChart"></canvas>
-            </div>
-            <div class="chart-container">
-                <h2>陀螺儀 (degree/s) - 匯入</h2>
-                <canvas id="importGyroChart"></canvas>
-            </div>
-        </div>
-    </div>
-
     <script>
-        // ==================== Live / Recorded Data ====================
+        // 最大數據點數
         const MAX_DATA_POINTS = 500;
        
+        // 初始化數據結構
         let data = {
-            accelX: [], accelY: [], accelZ: [],
-            gyroX: [], gyroY: [], gyroZ: [],
+            accelX: [],
+            accelY: [],
+            accelZ: [],
+            gyroX: [],
+            gyroY: [],
+            gyroZ: [],
             timestamps: []
         };
        
+        // 緩存不完整的行
         let buffer = '';
+        // 串口連接相關變量
         let port = null;
         let reader = null;
         let isReading = false;
         let readingData = [];
        
         let isSmoothingEnabled = true;
-        const smoothingAlpha = 0.28;
+        const smoothingAlpha = 0.28; // Smoothing strength (0.1 = strong, 0.5 = light)
         let smoothed = {
             accelX: 0, accelY: 0, accelZ: 0,
             gyroX: 0, gyroY: 0, gyroZ: 0
         };
 
+        // Runtime timer (starts on first valid data)
         let startTime = null;
-        let isRecording = false;   // controls whether new data is stored
 
-        // ==================== Imported Data ====================
-        const MAX_IMPORTED_FILES = 3;
-        let importedDatasets = [];
-
-        const fileColors = [
-            { x: 'rgb(255, 99, 132)',  y: 'rgb(54, 162, 235)',  z: 'rgb(75, 192, 192)' },
-            { x: 'rgb(255, 159, 64)',  y: 'rgb(153, 102, 255)', z: 'rgb(255, 205, 86)' },
-            { x: 'rgb(201, 203, 207)', y: 'rgb(0, 128, 128)',   z: 'rgb(128, 0, 128)' }
-        ];
-
-        // ==================== Live Charts ====================
+        // 初始化圖表
         const accelCtx = document.getElementById('accelChart').getContext('2d');
         const gyroCtx = document.getElementById('gyroChart').getContext('2d');
        
@@ -247,18 +154,52 @@
             data: {
                 labels: [],
                 datasets: [
-                    { label: 'X軸', data: [], borderColor: 'rgb(255, 99, 132)', backgroundColor: 'rgba(255, 99, 132, 0.1)', borderWidth: 2, tension: 0.1 },
-                    { label: 'Y軸', data: [], borderColor: 'rgb(54, 162, 235)', backgroundColor: 'rgba(54, 162, 235, 0.1)', borderWidth: 2, tension: 0.1 },
-                    { label: 'Z軸', data: [], borderColor: 'rgb(75, 192, 192)', backgroundColor: 'rgba(75, 192, 192, 0.1)', borderWidth: 2, tension: 0.1 }
+                    {
+                        label: 'X軸',
+                        data: [],
+                        borderColor: 'rgb(255, 99, 132)',
+                        backgroundColor: 'rgba(255, 99, 132, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.1
+                    },
+                    {
+                        label: 'Y軸',
+                        data: [],
+                        borderColor: 'rgb(54, 162, 235)',
+                        backgroundColor: 'rgba(54, 162, 235, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.1
+                    },
+                    {
+                        label: 'Z軸',
+                        data: [],
+                        borderColor: 'rgb(75, 192, 192)',
+                        backgroundColor: 'rgba(75, 192, 192, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.1
+                    }
                 ]
             },
             options: {
                 responsive: true,
                 scales: {
-                    y: { beginAtZero: false, title: { display: true, text: '加速度 (m/s²)' } },
-                    x: { title: { display: true, text: '時間 (s)' } }
+                    y: {
+                        beginAtZero: false,
+                        title: {
+                            display: true,
+                            text: '加速度 (m/s²)'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: '時間 (s)'
+                        }
+                    }
                 },
-                animation: { duration: 0 }
+                animation: {
+                    duration: 0
+                }
             }
         });
        
@@ -267,82 +208,101 @@
             data: {
                 labels: [],
                 datasets: [
-                    { label: 'X軸', data: [], borderColor: 'rgb(255, 99, 132)', backgroundColor: 'rgba(255, 99, 132, 0.1)', borderWidth: 2, tension: 0.1 },
-                    { label: 'Y軸', data: [], borderColor: 'rgb(54, 162, 235)', backgroundColor: 'rgba(54, 162, 235, 0.1)', borderWidth: 2, tension: 0.1 },
-                    { label: 'Z軸', data: [], borderColor: 'rgb(75, 192, 192)', backgroundColor: 'rgba(75, 192, 192, 0.1)', borderWidth: 2, tension: 0.1 }
+                    {
+                        label: 'X軸',
+                        data: [],
+                        borderColor: 'rgb(255, 99, 132)',
+                        backgroundColor: 'rgba(255, 99, 132, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.1
+                    },
+                    {
+                        label: 'Y軸',
+                        data: [],
+                        borderColor: 'rgb(54, 162, 235)',
+                        backgroundColor: 'rgba(54, 162, 235, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.1
+                    },
+                    {
+                        label: 'Z軸',
+                        data: [],
+                        borderColor: 'rgb(75, 192, 192)',
+                        backgroundColor: 'rgba(75, 192, 192, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.1
+                    }
                 ]
             },
             options: {
                 responsive: true,
                 scales: {
-                    y: { beginAtZero: false, title: { display: true, text: '角速度 (degree/s)' } },
-                    x: { title: { display: true, text: '時間 (s)' } }
+                    y: {
+                        beginAtZero: false,
+                        title: {
+                            display: true,
+                            text: '角速度 (degree/s)'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: '時間 (s)'
+                        }
+                    }
                 },
-                animation: { duration: 0 }
+                animation: {
+                    duration: 0
+                }
             }
         });
-
-        // ==================== Imported Charts ====================
-        const importAccelCtx = document.getElementById('importAccelChart').getContext('2d');
-        const importGyroCtx = document.getElementById('importGyroChart').getContext('2d');
-
-        const importAccelChart = new Chart(importAccelCtx, {
-            type: 'line',
-            data: { labels: [], datasets: [] },
-            options: {
-                responsive: true,
-                scales: {
-                    y: { beginAtZero: false, title: { display: true, text: '加速度 (m/s²)' } },
-                    x: { type: 'linear', title: { display: true, text: '時間 (s)' } }
-                },
-                animation: { duration: 0 },
-                plugins: { legend: { display: true, position: 'top' } }
-            }
-        });
-
-        const importGyroChart = new Chart(importGyroCtx, {
-            type: 'line',
-            data: { labels: [], datasets: [] },
-            options: {
-                responsive: true,
-                scales: {
-                    y: { beginAtZero: false, title: { display: true, text: '角速度 (degree/s)' } },
-                    x: { type: 'linear', title: { display: true, text: '時間 (s)' } }
-                },
-                animation: { duration: 0 },
-                plugins: { legend: { display: true, position: 'top' } }
-            }
-        });
-
-        // ==================== Live Chart Update ====================
+       
+        // 更新圖表數據
         function updateCharts() {
-            // Always show the last MAX_DATA_POINTS from the recorded buffer
-            const len = data.accelX.length;
-            const start = Math.max(0, len - MAX_DATA_POINTS);
-
-            accelChart.data.labels = data.timestamps.slice(start);
-            accelChart.data.datasets[0].data = data.accelX.slice(start);
-            accelChart.data.datasets[1].data = data.accelY.slice(start);
-            accelChart.data.datasets[2].data = data.accelZ.slice(start);
+            // 限制數據點數量
+            if (data.accelX.length > MAX_DATA_POINTS) {
+                const removeCount = data.accelX.length - MAX_DATA_POINTS;
+                data.timestamps.splice(0, removeCount);
+                data.accelX.splice(0, removeCount);
+                data.accelY.splice(0, removeCount);
+                data.accelZ.splice(0, removeCount);
+            }
+           
+            // 更新加速度圖表
+            accelChart.data.labels = data.timestamps.slice(-MAX_DATA_POINTS);
+            accelChart.data.datasets[0].data = data.accelX.slice(-MAX_DATA_POINTS);
+            accelChart.data.datasets[1].data = data.accelY.slice(-MAX_DATA_POINTS);
+            accelChart.data.datasets[2].data = data.accelZ.slice(-MAX_DATA_POINTS);
             accelChart.update('none');
         }
-
         function updateCharts2() {
-            const len = data.gyroX.length;
-            const start = Math.max(0, len - MAX_DATA_POINTS);
-
-            gyroChart.data.labels = data.timestamps.slice(start);
-            gyroChart.data.datasets[0].data = data.gyroX.slice(start);
-            gyroChart.data.datasets[1].data = data.gyroY.slice(start);
-            gyroChart.data.datasets[2].data = data.gyroZ.slice(start);
+            // 限制數據點數量
+            if (data.gyroX.length > MAX_DATA_POINTS) {
+                const removeCount = data.gyroX.length - MAX_DATA_POINTS;
+                data.timestamps.splice(0, removeCount);
+                data.gyroX.splice(0, removeCount);
+                data.gyroY.splice(0, removeCount);
+                data.gyroZ.splice(0, removeCount);
+            }
+           
+            // 更新陀螺儀圖表
+            gyroChart.data.labels = data.timestamps.slice(-MAX_DATA_POINTS);
+            gyroChart.data.datasets[0].data = data.gyroX.slice(-MAX_DATA_POINTS);
+            gyroChart.data.datasets[1].data = data.gyroY.slice(-MAX_DATA_POINTS);
+            gyroChart.data.datasets[2].data = data.gyroZ.slice(-MAX_DATA_POINTS);
             gyroChart.update('none');
         }
 
-        function clearRecordedData() {
+        // Reset everything (called on disconnect)
+        function resetDataAndCharts() {
             startTime = null;
             data = {
-                accelX: [], accelY: [], accelZ: [],
-                gyroX: [], gyroY: [], gyroZ: [],
+                accelX: [],
+                accelY: [],
+                accelZ: [],
+                gyroX: [],
+                gyroY: [],
+                gyroZ: [],
                 timestamps: []
             };
             readingData = [];
@@ -352,6 +312,7 @@
                 gyroX: 0, gyroY: 0, gyroZ: 0
             };
 
+            // Clear charts
             accelChart.data.labels = [];
             accelChart.data.datasets.forEach(ds => ds.data = []);
             accelChart.update('none');
@@ -360,250 +321,42 @@
             gyroChart.data.datasets.forEach(ds => ds.data = []);
             gyroChart.update('none');
         }
+       
+        const MAX_LINES = 100; // 最大行数
 
-        // ==================== Record Controls ====================
-        function updateRecordUI() {
-            const btn = document.getElementById('recordBtn');
-            const indicator = document.getElementById('recIndicator');
-
-            if (isRecording) {
-                btn.textContent = '停止記錄';
-                btn.classList.add('recording');
-                indicator.textContent = '● 記錄中';
-                indicator.className = 'rec-indicator rec-on';
-            } else {
-                btn.textContent = '開始記錄';
-                btn.classList.remove('recording');
-                indicator.textContent = '● 未記錄';
-                indicator.className = 'rec-indicator rec-off';
-            }
-        }
-
-        document.getElementById('recordBtn').addEventListener('click', () => {
-            isRecording = !isRecording;
-            updateRecordUI();
-        });
-
-        document.getElementById('clearRecordBtn').addEventListener('click', () => {
-            if (isRecording) {
-                // Optionally stop recording when clearing
-                isRecording = false;
-                updateRecordUI();
-            }
-            clearRecordedData();
-        });
-
-        // ==================== Imported Charts Update ====================
-        function rebuildImportedCharts() {
-            const accelDatasets = [];
-            const gyroDatasets = [];
-
-            importedDatasets.forEach((ds, fileIdx) => {
-                if (!ds.visible) return;
-
-                const colors = fileColors[fileIdx % fileColors.length];
-                const shortName = ds.name.length > 20 ? ds.name.substring(0, 17) + '...' : ds.name;
-
-                accelDatasets.push({
-                    label: `${shortName} - X`,
-                    data: ds.timestamps.map((t, i) => ({ x: t, y: ds.accelX[i] })),
-                    borderColor: colors.x,
-                    backgroundColor: colors.x.replace('rgb', 'rgba').replace(')', ', 0.1)'),
-                    borderWidth: 2, tension: 0.1, pointRadius: 0
-                });
-                accelDatasets.push({
-                    label: `${shortName} - Y`,
-                    data: ds.timestamps.map((t, i) => ({ x: t, y: ds.accelY[i] })),
-                    borderColor: colors.y,
-                    backgroundColor: colors.y.replace('rgb', 'rgba').replace(')', ', 0.1)'),
-                    borderWidth: 2, tension: 0.1, pointRadius: 0
-                });
-                accelDatasets.push({
-                    label: `${shortName} - Z`,
-                    data: ds.timestamps.map((t, i) => ({ x: t, y: ds.accelZ[i] })),
-                    borderColor: colors.z,
-                    backgroundColor: colors.z.replace('rgb', 'rgba').replace(')', ', 0.1)'),
-                    borderWidth: 2, tension: 0.1, pointRadius: 0
-                });
-
-                gyroDatasets.push({
-                    label: `${shortName} - X`,
-                    data: ds.timestamps.map((t, i) => ({ x: t, y: ds.gyroX[i] })),
-                    borderColor: colors.x,
-                    backgroundColor: colors.x.replace('rgb', 'rgba').replace(')', ', 0.1)'),
-                    borderWidth: 2, tension: 0.1, pointRadius: 0
-                });
-                gyroDatasets.push({
-                    label: `${shortName} - Y`,
-                    data: ds.timestamps.map((t, i) => ({ x: t, y: ds.gyroY[i] })),
-                    borderColor: colors.y,
-                    backgroundColor: colors.y.replace('rgb', 'rgba').replace(')', ', 0.1)'),
-                    borderWidth: 2, tension: 0.1, pointRadius: 0
-                });
-                gyroDatasets.push({
-                    label: `${shortName} - Z`,
-                    data: ds.timestamps.map((t, i) => ({ x: t, y: ds.gyroZ[i] })),
-                    borderColor: colors.z,
-                    backgroundColor: colors.z.replace('rgb', 'rgba').replace(')', ', 0.1)'),
-                    borderWidth: 2, tension: 0.1, pointRadius: 0
-                });
-            });
-
-            importAccelChart.data.datasets = accelDatasets;
-            importAccelChart.update();
-
-            importGyroChart.data.datasets = gyroDatasets;
-            importGyroChart.update();
-        }
-
-        function updateImportedFileListUI() {
-            const list = document.getElementById('importedFileList');
-            list.innerHTML = '';
-
-            if (importedDatasets.length === 0) {
-                list.innerHTML = '<em>尚未匯入任何檔案</em>';
-                return;
-            }
-
-            importedDatasets.forEach((ds, idx) => {
-                const div = document.createElement('div');
-                div.className = 'file-item';
-                div.innerHTML = `
-                    <input type="checkbox" id="vis_${idx}" ${ds.visible ? 'checked' : ''}>
-                    <label for="vis_${idx}">${ds.name} (${ds.timestamps.length} 點)</label>
-                `;
-                list.appendChild(div);
-
-                document.getElementById(`vis_${idx}`).addEventListener('change', (e) => {
-                    importedDatasets[idx].visible = e.target.checked;
-                    rebuildImportedCharts();
-                });
-            });
-        }
-
-        // ==================== CSV Parsing ====================
-        function parseCsvText(text, filename) {
-            const lines = text.trim().split(/\r?\n/);
-            if (lines.length < 2) {
-                alert(`檔案 ${filename} 內容過少`);
-                return null;
-            }
-
-            const rows = lines.slice(1);
-            const timestamps = [];
-            const accelX = [], accelY = [], accelZ = [];
-            const gyroX = [], gyroY = [], gyroZ = [];
-
-            for (const line of rows) {
-                if (!line.trim()) continue;
-                const cols = line.split(',');
-                if (cols.length < 7) continue;
-
-                const t = parseFloat(cols[0]);
-                const ax = parseFloat(cols[1]);
-                const ay = parseFloat(cols[2]);
-                const az = parseFloat(cols[3]);
-                const gx = parseFloat(cols[4]);
-                const gy = parseFloat(cols[5]);
-                const gz = parseFloat(cols[6]);
-
-                if (isNaN(t) || isNaN(ax) || isNaN(ay) || isNaN(az) ||
-                    isNaN(gx) || isNaN(gy) || isNaN(gz)) continue;
-
-                timestamps.push(t);
-                accelX.push(ax);
-                accelY.push(ay);
-                accelZ.push(az);
-                gyroX.push(gx);
-                gyroY.push(gy);
-                gyroZ.push(gz);
-            }
-
-            if (timestamps.length === 0) {
-                alert(`檔案 ${filename} 沒有有效數據`);
-                return null;
-            }
-
-            return {
-                name: filename,
-                timestamps,
-                accelX, accelY, accelZ,
-                gyroX, gyroY, gyroZ,
-                visible: true
-            };
-        }
-
-        // ==================== Import Handlers ====================
-        document.getElementById('importCsvBtn').addEventListener('click', () => {
-            if (isReading || port) {
-                alert('請先斷開串口連接再匯入 CSV');
-                return;
-            }
-            document.getElementById('csvFileInput').click();
-        });
-
-        document.getElementById('csvFileInput').addEventListener('change', async (e) => {
-            const files = Array.from(e.target.files);
-            if (files.length === 0) return;
-
-            if (importedDatasets.length + files.length > MAX_IMPORTED_FILES) {
-                alert(`最多只能匯入 ${MAX_IMPORTED_FILES} 個檔案`);
-                e.target.value = '';
-                return;
-            }
-
-            for (const file of files) {
-                if (importedDatasets.length >= MAX_IMPORTED_FILES) break;
-
-                try {
-                    const text = await file.text();
-                    const dataset = parseCsvText(text, file.name);
-                    if (dataset) {
-                        importedDatasets.push(dataset);
-                    }
-                } catch (err) {
-                    console.error(err);
-                    alert(`讀取檔案 ${file.name} 失敗`);
-                }
-            }
-
-            updateImportedFileListUI();
-            rebuildImportedCharts();
-            e.target.value = '';
-        });
-
-        document.getElementById('clearImportedBtn').addEventListener('click', () => {
-            importedDatasets = [];
-            updateImportedFileListUI();
-            rebuildImportedCharts();
-        });
-
-        // ==================== Serial Monitor & Live Parsing ====================
-        const MAX_LINES = 100;
-
+        // Toggle Smoothing Button
         document.getElementById('toggleSmoothingBtn').addEventListener('click', () => {
             isSmoothingEnabled = !isSmoothingEnabled;
             const btn = document.getElementById('toggleSmoothingBtn');
             btn.textContent = isSmoothingEnabled ? '平滑濾波：開啟' : '平滑濾波：關閉';
         });
 
+        // 显示串口数据到监视器
         function appendToSerialMonitor(text) {
             const serialContent = document.getElementById('serialContent');
+           
+            // 添加新行到监视器
             serialContent.textContent += text;
+            // 保留最近 50 行
             const lines = serialContent.textContent.split('\n');
             if (lines.length > MAX_LINES) {
                 serialContent.textContent = lines.slice(lines.length - MAX_LINES).join('\n');
             }
+            // 自动滚动到底部
             serialContent.scrollTop = serialContent.scrollHeight;
         }
 
+        // 定时清理网页缓存（每60秒清理一次）
         setInterval(() => {
             if ('caches' in window) {
                 caches.keys().then(cacheNames => {
-                    cacheNames.forEach(cacheName => caches.delete(cacheName));
+                    cacheNames.forEach(cacheName => {
+                        caches.delete(cacheName);
+                    });
                 });
+                console.log('网页缓存已清理！');
             }
-        }, 60000);
+        }, 60000); // 60000 毫秒 = 60 秒
 
         function calculateAverage(property) {
             if (readingData.length === 0) return 0;
@@ -611,181 +364,122 @@
             return sum / readingData.length;
         }
 
-        // function parseSerialData(text) {
-        //     appendToSerialMonitor(text);
-        //     buffer += text;
-        //     if (buffer.includes('------')) {
-        //         const groups = buffer.split(/------+/);
-        //         buffer = groups.pop();
-        //         for (const group of groups) {
-        //             const values = group.split(/[\n\s,;]+/)
-        //                                 .filter(item => item.trim() !== '')
-        //                                 .map(item => parseFloat(item))
-        //                                 .filter(num => !isNaN(num));
-        //             if (values.length >= 6) {
-        //                 // Only store data when recording is ON
-        //                 if (!isRecording) continue;
-
-        //                 if (startTime === null) {
-        //                     startTime = performance.now();
-        //                 }
-
-        //                 const [rawAX, rawAY, rawAZ, rawGX, rawGY, rawGZ] = values.slice(0, 6);
-        //                 readingData.push({ accelX: rawAX, accelY: rawAY, accelZ: rawAZ,
-        //                                     gyroX: rawGX, gyroY: rawGY, gyroZ: rawGZ });
-        //                 if (readingData.length > 5) readingData.shift();
-
-        //                 const elapsedSec = ((performance.now() - startTime) / 1000).toFixed(3);
-
-        //                 let accelX = calculateAverage('accelX') * 0.00980665;
-        //                 let accelY = calculateAverage('accelY') * 0.00980665;
-        //                 let accelZ = calculateAverage('accelZ') * 0.00980665;
-        //                 let gyroX = calculateAverage('gyroX') * 0.001;
-        //                 let gyroY = calculateAverage('gyroY') * 0.001;
-        //                 let gyroZ = calculateAverage('gyroZ') * 0.001;
-
-        //                 if (isSmoothingEnabled) {
-        //                     smoothed.accelX = smoothed.accelX * (1 - smoothingAlpha) + accelX * smoothingAlpha;
-        //                     smoothed.accelY = smoothed.accelY * (1 - smoothingAlpha) + accelY * smoothingAlpha;
-        //                     smoothed.accelZ = smoothed.accelZ * (1 - smoothingAlpha) + accelZ * smoothingAlpha;
-        //                     smoothed.gyroX = smoothed.gyroX * (1 - smoothingAlpha) + gyroX * smoothingAlpha;
-        //                     smoothed.gyroY = smoothed.gyroY * (1 - smoothingAlpha) + gyroY * smoothingAlpha;
-        //                     smoothed.gyroZ = smoothed.gyroZ * (1 - smoothingAlpha) + gyroZ * smoothingAlpha;
-        //                     data.accelX.push(smoothed.accelX);
-        //                     data.accelY.push(smoothed.accelY);
-        //                     data.accelZ.push(smoothed.accelZ);
-        //                     data.gyroX.push(smoothed.gyroX);
-        //                     data.gyroY.push(smoothed.gyroY);
-        //                     data.gyroZ.push(smoothed.gyroZ);
-        //                 } else {
-        //                     data.accelX.push(accelX);
-        //                     data.accelY.push(accelY);
-        //                     data.accelZ.push(accelZ);
-        //                     data.gyroX.push(gyroX);
-        //                     data.gyroY.push(gyroY);
-        //                     data.gyroZ.push(gyroZ);
-        //                 }
-        //                 data.timestamps.push(elapsedSec);
-
-        //                 // No hard limit on the buffer size – charts only show last 500
-        //                 updateCharts();
-        //                 updateCharts2();
-        //             }
-        //         }
-        //     }
-        // }
         function parseSerialData(text) {
             appendToSerialMonitor(text);
             buffer += text;
 
-            // Split into lines and keep the last incomplete line in the buffer
-            let lines = buffer.split(/\r?\n/);
-            buffer = lines.pop();   // incomplete line stays in buffer
+            // Process complete lines
+            const lines = buffer.split(/\r?\n/);
+            // Keep the last incomplete line in the buffer
+            buffer = lines.pop() || '';
 
-            for (let i = 0; i < lines.length; i++) {
-                const line = lines[i].trim();
-                if (!line) continue;
+            for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed) continue;
 
-                // Look for the start of a new packet
-                if (line.toUpperCase() === 'IMU') {
-                    // We need the next 6 lines: Ax, Ay, Az, Gx, Gy, Gz
-                    if (i + 6 >= lines.length) {
-                        // Not enough lines yet → put remaining lines back into buffer
-                        buffer = lines.slice(i).join('\n') + (buffer ? '\n' + buffer : '');
-                        break;
+                // Detect start of a new packet
+                if (trimmed === 'IMU') {
+                    // If we already have a partial packet, discard it
+                    currentPacket = {};
+                    continue;
+                }
+
+                // Match Ax: / Ay: / Az: / Gx: / Gy: / Gz:
+                const match = trimmed.match(/^(A[xyz]|G[xyz]):\s*(-?\d+)/i);
+                if (match) {
+                    const key = match[1].toLowerCase(); // ax, ay, az, gx, gy, gz
+                    const value = parseFloat(match[2]);
+
+                    if (!isNaN(value)) {
+                        currentPacket[key] = value;
                     }
+                }
 
-                    const axLine = lines[i + 1].trim();
-                    const ayLine = lines[i + 2].trim();
-                    const azLine = lines[i + 3].trim();
-                    const gxLine = lines[i + 4].trim();
-                    const gyLine = lines[i + 5].trim();
-                    const gzLine = lines[i + 6].trim();
+                // Check whether we have a complete packet
+                if (currentPacket.ax !== undefined &&
+                    currentPacket.ay !== undefined &&
+                    currentPacket.az !== undefined &&
+                    currentPacket.gx !== undefined &&
+                    currentPacket.gy !== undefined &&
+                    currentPacket.gz !== undefined) {
 
-                    // Helper to extract number after the colon
-                    const extractValue = (str, expectedPrefix) => {
-                        // Accept "Ax:123", "ax: 123", "AX:123" etc.
-                        const match = str.match(new RegExp(`^${expectedPrefix}\\s*:\\s*(-?\\d+\\.?\\d*)`, 'i'));
-                        return match ? parseFloat(match[1]) : NaN;
-                    };
-
-                    const rawAX = extractValue(axLine, 'Ax');
-                    const rawAY = extractValue(ayLine, 'Ay');
-                    const rawAZ = extractValue(azLine, 'Az');
-                    const rawGX = extractValue(gxLine, 'Gx');
-                    const rawGY = extractValue(gyLine, 'Gy');
-                    const rawGZ = extractValue(gzLine, 'Gz');
-
-                    // Skip this packet if any value is invalid
-                    if ([rawAX, rawAY, rawAZ, rawGX, rawGY, rawGZ].some(v => isNaN(v))) {
-                        i += 6;          // skip the 6 value lines
-                        continue;
-                    }
-
-                    // ----- Only store data when recording is ON -----
-                    if (!isRecording) {
-                        i += 6;
-                        continue;
-                    }
-
-                    if (startTime === null) {
-                        startTime = performance.now();
-                    }
-
-                    readingData.push({
-                        accelX: rawAX, accelY: rawAY, accelZ: rawAZ,
-                        gyroX:  rawGX, gyroY:  rawGY, gyroZ:  rawGZ
-                    });
-                    if (readingData.length > 5) readingData.shift();
-
-                    const elapsedSec = ((performance.now() - startTime) / 1000).toFixed(3);
-
-                    let accelX = calculateAverage('accelX') * 0.00980665;
-                    let accelY = calculateAverage('accelY') * 0.00980665;
-                    let accelZ = calculateAverage('accelZ') * 0.00980665;
-                    let gyroX  = calculateAverage('gyroX')  * 0.001;
-                    let gyroY  = calculateAverage('gyroY')  * 0.001;
-                    let gyroZ  = calculateAverage('gyroZ')  * 0.001;
-
-                    if (isSmoothingEnabled) {
-                        smoothed.accelX = smoothed.accelX * (1 - smoothingAlpha) + accelX * smoothingAlpha;
-                        smoothed.accelY = smoothed.accelY * (1 - smoothingAlpha) + accelY * smoothingAlpha;
-                        smoothed.accelZ = smoothed.accelZ * (1 - smoothingAlpha) + accelZ * smoothingAlpha;
-                        smoothed.gyroX  = smoothed.gyroX  * (1 - smoothingAlpha) + gyroX  * smoothingAlpha;
-                        smoothed.gyroY  = smoothed.gyroY  * (1 - smoothingAlpha) + gyroY  * smoothingAlpha;
-                        smoothed.gyroZ  = smoothed.gyroZ  * (1 - smoothingAlpha) + gyroZ  * smoothingAlpha;
-
-                        data.accelX.push(smoothed.accelX);
-                        data.accelY.push(smoothed.accelY);
-                        data.accelZ.push(smoothed.accelZ);
-                        data.gyroX.push(smoothed.gyroX);
-                        data.gyroY.push(smoothed.gyroY);
-                        data.gyroZ.push(smoothed.gyroZ);
-                    } else {
-                        data.accelX.push(accelX);
-                        data.accelY.push(accelY);
-                        data.accelZ.push(accelZ);
-                        data.gyroX.push(gyroX);
-                        data.gyroY.push(gyroY);
-                        data.gyroZ.push(gyroZ);
-                    }
-
-                    data.timestamps.push(elapsedSec);
-                    updateCharts();
-                    updateCharts2();
-
-                    // Skip the 6 value lines we just processed
-                    i += 6;
+                    processCompletePacket(currentPacket);
+                    currentPacket = {};   // ready for next packet
                 }
             }
         }
 
-        function exportToCsv() {
-            if (data.timestamps.length === 0) {
-                alert('目前沒有可匯出的記錄資料');
-                return;
+        // New helper – keeps the original averaging / scaling / smoothing logic
+        function processCompletePacket(pkt) {
+            // Start timer on first valid packet
+            if (startTime === null) {
+                startTime = performance.now();
             }
+
+            readingData.push({
+                accelX: pkt.ax,
+                accelY: pkt.ay,
+                accelZ: pkt.az,
+                gyroX:  pkt.gx,
+                gyroY:  pkt.gy,
+                gyroZ:  pkt.gz
+            });
+            if (readingData.length > 5) readingData.shift();
+
+            // Elapsed time in seconds (3 decimal places)
+            const elapsedSec = ((performance.now() - startTime) / 1000).toFixed(3);
+
+            // Scale averages (same conversion as before)
+            let accelX = calculateAverage('accelX') * 0.00980665;
+            let accelY = calculateAverage('accelY') * 0.00980665;
+            let accelZ = calculateAverage('accelZ') * 0.00980665;
+            let gyroX  = calculateAverage('gyroX')  * 0.001;
+            let gyroY  = calculateAverage('gyroY')  * 0.001;
+            let gyroZ  = calculateAverage('gyroZ')  * 0.001;
+
+            // Optional EMA smoothing
+            if (isSmoothingEnabled) {
+                smoothed.accelX = smoothed.accelX * (1 - smoothingAlpha) + accelX * smoothingAlpha;
+                smoothed.accelY = smoothed.accelY * (1 - smoothingAlpha) + accelY * smoothingAlpha;
+                smoothed.accelZ = smoothed.accelZ * (1 - smoothingAlpha) + accelZ * smoothingAlpha;
+                smoothed.gyroX  = smoothed.gyroX  * (1 - smoothingAlpha) + gyroX  * smoothingAlpha;
+                smoothed.gyroY  = smoothed.gyroY  * (1 - smoothingAlpha) + gyroY  * smoothingAlpha;
+                smoothed.gyroZ  = smoothed.gyroZ  * (1 - smoothingAlpha) + gyroZ  * smoothingAlpha;
+
+                data.accelX.push(smoothed.accelX);
+                data.accelY.push(smoothed.accelY);
+                data.accelZ.push(smoothed.accelZ);
+                data.gyroX.push(smoothed.gyroX);
+                data.gyroY.push(smoothed.gyroY);
+                data.gyroZ.push(smoothed.gyroZ);
+            } else {
+                data.accelX.push(accelX);
+                data.accelY.push(accelY);
+                data.accelZ.push(accelZ);
+                data.gyroX.push(gyroX);
+                data.gyroY.push(gyroY);
+                data.gyroZ.push(gyroZ);
+            }
+
+            data.timestamps.push(elapsedSec);
+
+            // Limit data points
+            if (data.accelX.length > MAX_DATA_POINTS) {
+                data.accelX.shift(); data.accelY.shift(); data.accelZ.shift();
+                data.gyroX.shift();  data.gyroY.shift();  data.gyroZ.shift();
+                data.timestamps.shift();
+            }
+
+            updateCharts();
+            updateCharts2();
+        }
+
+        // Function to export data to CSV
+        function exportToCsv() {
+            // Define CSV headers
             const headers = ['Timestamp (s)', 'AccelX', 'AccelY', 'AccelZ', 'GyroX', 'GyroY', 'GyroZ'];
+           
+            // Combine data into rows
             const rows = data.timestamps.map((timestamp, index) => {
                 return [
                     timestamp,
@@ -797,9 +491,15 @@
                     data.gyroZ[index]
                 ].join(',');
             });
+           
+            // Create CSV content
             const csvContent = [headers.join(','), ...rows].join('\n');
+           
+            // Create a Blob for download
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
+           
+            // Create a temporary link to trigger download
             const link = document.createElement('a');
             link.setAttribute('href', url);
             link.setAttribute('download', 'imu_data.csv');
@@ -809,11 +509,17 @@
             URL.revokeObjectURL(url);
         }
        
+        // 讀取串口數據
         async function readSerialData() {
             try {
                 while (port && isReading) {
                     const { value, done } = await reader.read();
-                    if (done) break;
+                    if (done) {
+                        console.log('串口讀取完成');
+                        break;
+                    }
+                   
+                    // 將接收到的數據轉換為文本
                     const text = new TextDecoder().decode(value);
                     parseSerialData(text);
                 }
@@ -822,25 +528,39 @@
                 document.getElementById('status').textContent = '讀取錯誤: ' + error.message;
                 document.getElementById('status').className = 'disconnected';
                 isReading = false;
+               
+                // 嘗試重新連接
                 if (port) {
                     setTimeout(() => {
-                        if (isReading) readSerialData();
+                        if (isReading) {
+                            console.log('嘗試重新連接...');
+                            readSerialData();
+                        }
                     }, 1000);
                 }
             }
-            if (reader) reader.releaseLock();
+           
+            if (reader) {
+                reader.releaseLock();
+            }
         }
        
+        // 連接串口
         document.getElementById('connectBtn').addEventListener('click', async () => {
             try {
+                // Reset timer and graphs
+                resetDataAndCharts();
                 port = await navigator.serial.requestPort();
                 await port.open({ baudRate: 115200 });
+               
                 reader = port.readable.getReader();
                 isReading = true;
+               
                 document.getElementById('status').textContent = '已連接';
                 document.getElementById('status').className = 'connected';
-                document.getElementById('importCsvBtn').disabled = true;
+               
                 readSerialData();
+               
             } catch (error) {
                 console.error('串口連接錯誤:', error);
                 document.getElementById('status').textContent = '連接錯誤: ' + error.message;
@@ -848,32 +568,41 @@
             }
         });
        
+        // 斷開串口連接
         document.getElementById('disconnectBtn').addEventListener('click', async () => {
             isReading = false;
+           
             if (reader) {
-                try { await reader.cancel(); } catch (e) {}
+                try {
+                    await reader.cancel();
+                } catch (error) {
+                    console.error('取消讀取錯誤:', error);
+                }
                 reader.releaseLock();
                 reader = null;
             }
+           
             if (port) {
-                try { await port.close(); } catch (e) {}
+                try {
+                    await port.close();
+                } catch (error) {
+                    console.error('關閉串口錯誤:', error);
+                }
                 port = null;
             }
-            // Keep recorded data on disconnect
+           
+
+
             document.getElementById('status').textContent = '未連接';
             document.getElementById('status').className = 'disconnected';
-            document.getElementById('importCsvBtn').disabled = false;
         });
 
         document.getElementById('exportCsvButton').addEventListener('click', exportToCsv);
        
+        // 清除串口監視器內容
         document.getElementById('clearSerialBtn').addEventListener('click', () => {
             document.getElementById('serialContent').textContent = '';
         });
-
-        // Initial UI
-        updateRecordUI();
-        updateImportedFileListUI();
     </script>
 </body>
 </html>
