@@ -508,6 +508,8 @@
         // 連接串口
         document.getElementById('connectBtn').addEventListener('click', async () => {
             try {
+                // Reset timer and graphs
+                resetDataAndCharts();
                 port = await navigator.serial.requestPort();
                 await port.open({ baudRate: 115200 });
                
@@ -549,8 +551,7 @@
                 port = null;
             }
            
-            // Reset timer and graphs
-            resetDataAndCharts();
+
 
             document.getElementById('status').textContent = '未連接';
             document.getElementById('status').className = 'disconnected';

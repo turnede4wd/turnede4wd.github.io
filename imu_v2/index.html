@@ -85,6 +85,35 @@
         .toggle-btn:hover {
             background-color: #1976D2;
         }
+        .record-btn {
+            background-color: #ff9800;
+        }
+        .record-btn:hover {
+            background-color: #f57c00;
+        }
+        .record-btn.recording {
+            background-color: #e53935;
+        }
+        .record-btn.recording:hover {
+            background-color: #c62828;
+        }
+        .rec-indicator {
+            display: inline-block;
+            margin-left: 12px;
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 14px;
+            vertical-align: middle;
+        }
+        .rec-on {
+            background-color: #ffebee;
+            color: #c62828;
+        }
+        .rec-off {
+            background-color: #eeeeee;
+            color: #757575;
+        }
         .import-section {
             margin-top: 30px;
             padding: 15px;
@@ -120,13 +149,16 @@
         <button id="connectBtn">連接串口</button>
         <button id="disconnectBtn">斷開連接</button>
         <button id="toggleSmoothingBtn" class="toggle-btn">平滑濾波：開啟</button>
+        <button id="recordBtn" class="record-btn">開始記錄</button>
+        <button id="clearRecordBtn" class="clear-btn">清除記錄</button>
+        <span id="recIndicator" class="rec-indicator rec-off">● 未記錄</span>
         <div id="status" class="disconnected">未連接</div>
         <div class="data-info">
             <p>串口設置: 115200 baud</p>
         </div>
     </div>
    
-    <h2 class="section-title">即時數據</h2>
+    <h2 class="section-title">即時數據（來自記錄緩衝區，顯示最近 500 點）</h2>
     <div class="container">
         <div class="chart-container">
             <h2>加速度 (m/s²)</h2>
@@ -142,7 +174,7 @@
         <h2>串口輸入監視器</h2>
         <button id="clearSerialBtn" class="clear-btn">清除內容</button>
         <div class="serial-content" id="serialContent"></div>
-        <button id="exportCsvButton">匯出 CSV</button>
+        <button id="exportCsvButton">匯出 CSV（完整記錄）</button>
     </div>
 
     <!-- ========== Imported CSV Comparison Section ========== -->
@@ -171,7 +203,7 @@
     </div>
 
     <script>
-        // ==================== Live Data ====================
+        // ==================== Live / Recorded Data ====================
         const MAX_DATA_POINTS = 500;
        
         let data = {
@@ -194,12 +226,12 @@
         };
 
         let startTime = null;
+        let isRecording = false;   // controls whether new data is stored
 
         // ==================== Imported Data ====================
         const MAX_IMPORTED_FILES = 3;
-        let importedDatasets = []; // { name, timestamps, accelX, accelY, accelZ, gyroX, gyroY, gyroZ, visible }
+        let importedDatasets = [];
 
-        // Color palette for up to 3 files
         const fileColors = [
             { x: 'rgb(255, 99, 132)',  y: 'rgb(54, 162, 235)',  z: 'rgb(75, 192, 192)' },
             { x: 'rgb(255, 159, 64)',  y: 'rgb(153, 102, 255)', z: 'rgb(255, 205, 86)' },
@@ -261,12 +293,10 @@
                 responsive: true,
                 scales: {
                     y: { beginAtZero: false, title: { display: true, text: '加速度 (m/s²)' } },
-                    x: { title: { display: true, text: '時間 (s)' } }
+                    x: { type: 'linear', title: { display: true, text: '時間 (s)' } }
                 },
                 animation: { duration: 0 },
-                plugins: {
-                    legend: { display: true, position: 'top' }
-                }
+                plugins: { legend: { display: true, position: 'top' } }
             }
         });
 
@@ -277,47 +307,38 @@
                 responsive: true,
                 scales: {
                     y: { beginAtZero: false, title: { display: true, text: '角速度 (degree/s)' } },
-                    x: { title: { display: true, text: '時間 (s)' } }
+                    x: { type: 'linear', title: { display: true, text: '時間 (s)' } }
                 },
                 animation: { duration: 0 },
-                plugins: {
-                    legend: { display: true, position: 'top' }
-                }
+                plugins: { legend: { display: true, position: 'top' } }
             }
         });
 
         // ==================== Live Chart Update ====================
         function updateCharts() {
-            if (data.accelX.length > MAX_DATA_POINTS) {
-                const removeCount = data.accelX.length - MAX_DATA_POINTS;
-                data.timestamps.splice(0, removeCount);
-                data.accelX.splice(0, removeCount);
-                data.accelY.splice(0, removeCount);
-                data.accelZ.splice(0, removeCount);
-            }
-            accelChart.data.labels = data.timestamps.slice(-MAX_DATA_POINTS);
-            accelChart.data.datasets[0].data = data.accelX.slice(-MAX_DATA_POINTS);
-            accelChart.data.datasets[1].data = data.accelY.slice(-MAX_DATA_POINTS);
-            accelChart.data.datasets[2].data = data.accelZ.slice(-MAX_DATA_POINTS);
+            // Always show the last MAX_DATA_POINTS from the recorded buffer
+            const len = data.accelX.length;
+            const start = Math.max(0, len - MAX_DATA_POINTS);
+
+            accelChart.data.labels = data.timestamps.slice(start);
+            accelChart.data.datasets[0].data = data.accelX.slice(start);
+            accelChart.data.datasets[1].data = data.accelY.slice(start);
+            accelChart.data.datasets[2].data = data.accelZ.slice(start);
             accelChart.update('none');
         }
 
         function updateCharts2() {
-            if (data.gyroX.length > MAX_DATA_POINTS) {
-                const removeCount = data.gyroX.length - MAX_DATA_POINTS;
-                data.timestamps.splice(0, removeCount);
-                data.gyroX.splice(0, removeCount);
-                data.gyroY.splice(0, removeCount);
-                data.gyroZ.splice(0, removeCount);
-            }
-            gyroChart.data.labels = data.timestamps.slice(-MAX_DATA_POINTS);
-            gyroChart.data.datasets[0].data = data.gyroX.slice(-MAX_DATA_POINTS);
-            gyroChart.data.datasets[1].data = data.gyroY.slice(-MAX_DATA_POINTS);
-            gyroChart.data.datasets[2].data = data.gyroZ.slice(-MAX_DATA_POINTS);
+            const len = data.gyroX.length;
+            const start = Math.max(0, len - MAX_DATA_POINTS);
+
+            gyroChart.data.labels = data.timestamps.slice(start);
+            gyroChart.data.datasets[0].data = data.gyroX.slice(start);
+            gyroChart.data.datasets[1].data = data.gyroY.slice(start);
+            gyroChart.data.datasets[2].data = data.gyroZ.slice(start);
             gyroChart.update('none');
         }
 
-        function resetDataAndCharts() {
+        function clearRecordedData() {
             startTime = null;
             data = {
                 accelX: [], accelY: [], accelZ: [],
@@ -340,18 +361,40 @@
             gyroChart.update('none');
         }
 
+        // ==================== Record Controls ====================
+        function updateRecordUI() {
+            const btn = document.getElementById('recordBtn');
+            const indicator = document.getElementById('recIndicator');
+
+            if (isRecording) {
+                btn.textContent = '停止記錄';
+                btn.classList.add('recording');
+                indicator.textContent = '● 記錄中';
+                indicator.className = 'rec-indicator rec-on';
+            } else {
+                btn.textContent = '開始記錄';
+                btn.classList.remove('recording');
+                indicator.textContent = '● 未記錄';
+                indicator.className = 'rec-indicator rec-off';
+            }
+        }
+
+        document.getElementById('recordBtn').addEventListener('click', () => {
+            isRecording = !isRecording;
+            updateRecordUI();
+        });
+
+        document.getElementById('clearRecordBtn').addEventListener('click', () => {
+            if (isRecording) {
+                // Optionally stop recording when clearing
+                isRecording = false;
+                updateRecordUI();
+            }
+            clearRecordedData();
+        });
+
         // ==================== Imported Charts Update ====================
         function rebuildImportedCharts() {
-            // Collect all unique timestamps (sorted) for a common x-axis
-            let allTimestamps = new Set();
-            importedDatasets.forEach(ds => {
-                if (ds.visible) {
-                    ds.timestamps.forEach(t => allTimestamps.add(t));
-                }
-            });
-            const sortedLabels = Array.from(allTimestamps).sort((a, b) => a - b);
-
-            // Build datasets
             const accelDatasets = [];
             const gyroDatasets = [];
 
@@ -361,37 +404,26 @@
                 const colors = fileColors[fileIdx % fileColors.length];
                 const shortName = ds.name.length > 20 ? ds.name.substring(0, 17) + '...' : ds.name;
 
-                // Map data to the common labels (simple nearest or exact match)
-                // For simplicity we use the original timestamps as labels per series
-                // Chart.js can handle different x values if we use {x, y} points
-                // But to keep it simple and aligned, we will use point objects.
-
                 accelDatasets.push({
                     label: `${shortName} - X`,
                     data: ds.timestamps.map((t, i) => ({ x: t, y: ds.accelX[i] })),
                     borderColor: colors.x,
                     backgroundColor: colors.x.replace('rgb', 'rgba').replace(')', ', 0.1)'),
-                    borderWidth: 2,
-                    tension: 0.1,
-                    pointRadius: 0
+                    borderWidth: 2, tension: 0.1, pointRadius: 0
                 });
                 accelDatasets.push({
                     label: `${shortName} - Y`,
                     data: ds.timestamps.map((t, i) => ({ x: t, y: ds.accelY[i] })),
                     borderColor: colors.y,
                     backgroundColor: colors.y.replace('rgb', 'rgba').replace(')', ', 0.1)'),
-                    borderWidth: 2,
-                    tension: 0.1,
-                    pointRadius: 0
+                    borderWidth: 2, tension: 0.1, pointRadius: 0
                 });
                 accelDatasets.push({
                     label: `${shortName} - Z`,
                     data: ds.timestamps.map((t, i) => ({ x: t, y: ds.accelZ[i] })),
                     borderColor: colors.z,
                     backgroundColor: colors.z.replace('rgb', 'rgba').replace(')', ', 0.1)'),
-                    borderWidth: 2,
-                    tension: 0.1,
-                    pointRadius: 0
+                    borderWidth: 2, tension: 0.1, pointRadius: 0
                 });
 
                 gyroDatasets.push({
@@ -399,39 +431,23 @@
                     data: ds.timestamps.map((t, i) => ({ x: t, y: ds.gyroX[i] })),
                     borderColor: colors.x,
                     backgroundColor: colors.x.replace('rgb', 'rgba').replace(')', ', 0.1)'),
-                    borderWidth: 2,
-                    tension: 0.1,
-                    pointRadius: 0
+                    borderWidth: 2, tension: 0.1, pointRadius: 0
                 });
                 gyroDatasets.push({
                     label: `${shortName} - Y`,
                     data: ds.timestamps.map((t, i) => ({ x: t, y: ds.gyroY[i] })),
                     borderColor: colors.y,
                     backgroundColor: colors.y.replace('rgb', 'rgba').replace(')', ', 0.1)'),
-                    borderWidth: 2,
-                    tension: 0.1,
-                    pointRadius: 0
+                    borderWidth: 2, tension: 0.1, pointRadius: 0
                 });
                 gyroDatasets.push({
                     label: `${shortName} - Z`,
                     data: ds.timestamps.map((t, i) => ({ x: t, y: ds.gyroZ[i] })),
                     borderColor: colors.z,
                     backgroundColor: colors.z.replace('rgb', 'rgba').replace(')', ', 0.1)'),
-                    borderWidth: 2,
-                    tension: 0.1,
-                    pointRadius: 0
+                    borderWidth: 2, tension: 0.1, pointRadius: 0
                 });
             });
-
-            // Switch to linear x scale for proper time alignment
-            importAccelChart.options.scales.x = {
-                type: 'linear',
-                title: { display: true, text: '時間 (s)' }
-            };
-            importGyroChart.options.scales.x = {
-                type: 'linear',
-                title: { display: true, text: '時間 (s)' }
-            };
 
             importAccelChart.data.datasets = accelDatasets;
             importAccelChart.update();
@@ -473,7 +489,6 @@
                 return null;
             }
 
-            // Skip header
             const rows = lines.slice(1);
             const timestamps = [];
             const accelX = [], accelY = [], accelZ = [];
@@ -554,7 +569,7 @@
 
             updateImportedFileListUI();
             rebuildImportedCharts();
-            e.target.value = ''; // allow re-selecting same files
+            e.target.value = '';
         });
 
         document.getElementById('clearImportedBtn').addEventListener('click', () => {
@@ -608,6 +623,9 @@
                                         .map(item => parseFloat(item))
                                         .filter(num => !isNaN(num));
                     if (values.length >= 6) {
+                        // Only store data when recording is ON
+                        if (!isRecording) continue;
+
                         if (startTime === null) {
                             startTime = performance.now();
                         }
@@ -649,11 +667,7 @@
                         }
                         data.timestamps.push(elapsedSec);
 
-                        if (data.accelX.length > MAX_DATA_POINTS) {
-                            data.accelX.shift(); data.accelY.shift(); data.accelZ.shift();
-                            data.gyroX.shift(); data.gyroY.shift(); data.gyroZ.shift();
-                            data.timestamps.shift();
-                        }
+                        // No hard limit on the buffer size – charts only show last 500
                         updateCharts();
                         updateCharts2();
                     }
@@ -662,6 +676,10 @@
         }
 
         function exportToCsv() {
+            if (data.timestamps.length === 0) {
+                alert('目前沒有可匯出的記錄資料');
+                return;
+            }
             const headers = ['Timestamp (s)', 'AccelX', 'AccelY', 'AccelZ', 'GyroX', 'GyroY', 'GyroZ'];
             const rows = data.timestamps.map((timestamp, index) => {
                 return [
@@ -736,7 +754,7 @@
                 try { await port.close(); } catch (e) {}
                 port = null;
             }
-            resetDataAndCharts();
+            // Keep recorded data on disconnect
             document.getElementById('status').textContent = '未連接';
             document.getElementById('status').className = 'disconnected';
             document.getElementById('importCsvBtn').disabled = false;
@@ -749,6 +767,7 @@
         });
 
         // Initial UI
+        updateRecordUI();
         updateImportedFileListUI();
     </script>
 </body>
