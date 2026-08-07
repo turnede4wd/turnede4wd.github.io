@@ -56,9 +56,14 @@
             border-radius: 4px;
             cursor: pointer;
             margin-right: 10px;
+            margin-bottom: 6px;
         }
         button:hover {
             background-color: #45a049;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
         }
         #status {
             margin-top: 10px;
@@ -80,6 +85,32 @@
         .toggle-btn:hover {
             background-color: #1976D2;
         }
+        .import-section {
+            margin-top: 30px;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .import-controls {
+            margin-bottom: 15px;
+        }
+        .file-list {
+            margin: 10px 0;
+            font-size: 14px;
+        }
+        .file-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 4px 0;
+        }
+        .section-title {
+            margin-top: 25px;
+            margin-bottom: 10px;
+            font-size: 1.3em;
+            color: #333;
+        }
     </style>
 </head>
 <body>
@@ -95,6 +126,7 @@
         </div>
     </div>
    
+    <h2 class="section-title">即時數據</h2>
     <div class="container">
         <div class="chart-container">
             <h2>加速度 (m/s²)</h2>
@@ -112,40 +144,69 @@
         <div class="serial-content" id="serialContent"></div>
         <button id="exportCsvButton">匯出 CSV</button>
     </div>
+
+    <!-- ========== Imported CSV Comparison Section ========== -->
+    <div class="import-section">
+        <h2>CSV 數據比較</h2>
+        <div class="import-controls">
+            <input type="file" id="csvFileInput" accept=".csv" multiple style="display:none;">
+            <button id="importCsvBtn">匯入 CSV (最多 3 個)</button>
+            <button id="clearImportedBtn" class="clear-btn">清除已匯入數據</button>
+        </div>
+        <div class="file-list" id="importedFileList">
+            <!-- dynamically filled -->
+        </div>
+
+        <h2 class="section-title">匯入數據圖表</h2>
+        <div class="container">
+            <div class="chart-container">
+                <h2>加速度 (m/s²) - 匯入</h2>
+                <canvas id="importAccelChart"></canvas>
+            </div>
+            <div class="chart-container">
+                <h2>陀螺儀 (degree/s) - 匯入</h2>
+                <canvas id="importGyroChart"></canvas>
+            </div>
+        </div>
+    </div>
+
     <script>
-        // 最大數據點數
+        // ==================== Live Data ====================
         const MAX_DATA_POINTS = 500;
        
-        // 初始化數據結構
         let data = {
-            accelX: [],
-            accelY: [],
-            accelZ: [],
-            gyroX: [],
-            gyroY: [],
-            gyroZ: [],
+            accelX: [], accelY: [], accelZ: [],
+            gyroX: [], gyroY: [], gyroZ: [],
             timestamps: []
         };
        
-        // 緩存不完整的行
         let buffer = '';
-        // 串口連接相關變量
         let port = null;
         let reader = null;
         let isReading = false;
         let readingData = [];
        
         let isSmoothingEnabled = true;
-        const smoothingAlpha = 0.28; // Smoothing strength (0.1 = strong, 0.5 = light)
+        const smoothingAlpha = 0.28;
         let smoothed = {
             accelX: 0, accelY: 0, accelZ: 0,
             gyroX: 0, gyroY: 0, gyroZ: 0
         };
 
-        // Runtime timer (starts on first valid data)
         let startTime = null;
 
-        // 初始化圖表
+        // ==================== Imported Data ====================
+        const MAX_IMPORTED_FILES = 3;
+        let importedDatasets = []; // { name, timestamps, accelX, accelY, accelZ, gyroX, gyroY, gyroZ, visible }
+
+        // Color palette for up to 3 files
+        const fileColors = [
+            { x: 'rgb(255, 99, 132)',  y: 'rgb(54, 162, 235)',  z: 'rgb(75, 192, 192)' },
+            { x: 'rgb(255, 159, 64)',  y: 'rgb(153, 102, 255)', z: 'rgb(255, 205, 86)' },
+            { x: 'rgb(201, 203, 207)', y: 'rgb(0, 128, 128)',   z: 'rgb(128, 0, 128)' }
+        ];
+
+        // ==================== Live Charts ====================
         const accelCtx = document.getElementById('accelChart').getContext('2d');
         const gyroCtx = document.getElementById('gyroChart').getContext('2d');
        
@@ -154,52 +215,18 @@
             data: {
                 labels: [],
                 datasets: [
-                    {
-                        label: 'X軸',
-                        data: [],
-                        borderColor: 'rgb(255, 99, 132)',
-                        backgroundColor: 'rgba(255, 99, 132, 0.1)',
-                        borderWidth: 2,
-                        tension: 0.1
-                    },
-                    {
-                        label: 'Y軸',
-                        data: [],
-                        borderColor: 'rgb(54, 162, 235)',
-                        backgroundColor: 'rgba(54, 162, 235, 0.1)',
-                        borderWidth: 2,
-                        tension: 0.1
-                    },
-                    {
-                        label: 'Z軸',
-                        data: [],
-                        borderColor: 'rgb(75, 192, 192)',
-                        backgroundColor: 'rgba(75, 192, 192, 0.1)',
-                        borderWidth: 2,
-                        tension: 0.1
-                    }
+                    { label: 'X軸', data: [], borderColor: 'rgb(255, 99, 132)', backgroundColor: 'rgba(255, 99, 132, 0.1)', borderWidth: 2, tension: 0.1 },
+                    { label: 'Y軸', data: [], borderColor: 'rgb(54, 162, 235)', backgroundColor: 'rgba(54, 162, 235, 0.1)', borderWidth: 2, tension: 0.1 },
+                    { label: 'Z軸', data: [], borderColor: 'rgb(75, 192, 192)', backgroundColor: 'rgba(75, 192, 192, 0.1)', borderWidth: 2, tension: 0.1 }
                 ]
             },
             options: {
                 responsive: true,
                 scales: {
-                    y: {
-                        beginAtZero: false,
-                        title: {
-                            display: true,
-                            text: '加速度 (m/s²)'
-                        }
-                    },
-                    x: {
-                        title: {
-                            display: true,
-                            text: '時間 (s)'
-                        }
-                    }
+                    y: { beginAtZero: false, title: { display: true, text: '加速度 (m/s²)' } },
+                    x: { title: { display: true, text: '時間 (s)' } }
                 },
-                animation: {
-                    duration: 0
-                }
+                animation: { duration: 0 }
             }
         });
        
@@ -208,58 +235,59 @@
             data: {
                 labels: [],
                 datasets: [
-                    {
-                        label: 'X軸',
-                        data: [],
-                        borderColor: 'rgb(255, 99, 132)',
-                        backgroundColor: 'rgba(255, 99, 132, 0.1)',
-                        borderWidth: 2,
-                        tension: 0.1
-                    },
-                    {
-                        label: 'Y軸',
-                        data: [],
-                        borderColor: 'rgb(54, 162, 235)',
-                        backgroundColor: 'rgba(54, 162, 235, 0.1)',
-                        borderWidth: 2,
-                        tension: 0.1
-                    },
-                    {
-                        label: 'Z軸',
-                        data: [],
-                        borderColor: 'rgb(75, 192, 192)',
-                        backgroundColor: 'rgba(75, 192, 192, 0.1)',
-                        borderWidth: 2,
-                        tension: 0.1
-                    }
+                    { label: 'X軸', data: [], borderColor: 'rgb(255, 99, 132)', backgroundColor: 'rgba(255, 99, 132, 0.1)', borderWidth: 2, tension: 0.1 },
+                    { label: 'Y軸', data: [], borderColor: 'rgb(54, 162, 235)', backgroundColor: 'rgba(54, 162, 235, 0.1)', borderWidth: 2, tension: 0.1 },
+                    { label: 'Z軸', data: [], borderColor: 'rgb(75, 192, 192)', backgroundColor: 'rgba(75, 192, 192, 0.1)', borderWidth: 2, tension: 0.1 }
                 ]
             },
             options: {
                 responsive: true,
                 scales: {
-                    y: {
-                        beginAtZero: false,
-                        title: {
-                            display: true,
-                            text: '角速度 (degree/s)'
-                        }
-                    },
-                    x: {
-                        title: {
-                            display: true,
-                            text: '時間 (s)'
-                        }
-                    }
+                    y: { beginAtZero: false, title: { display: true, text: '角速度 (degree/s)' } },
+                    x: { title: { display: true, text: '時間 (s)' } }
                 },
-                animation: {
-                    duration: 0
+                animation: { duration: 0 }
+            }
+        });
+
+        // ==================== Imported Charts ====================
+        const importAccelCtx = document.getElementById('importAccelChart').getContext('2d');
+        const importGyroCtx = document.getElementById('importGyroChart').getContext('2d');
+
+        const importAccelChart = new Chart(importAccelCtx, {
+            type: 'line',
+            data: { labels: [], datasets: [] },
+            options: {
+                responsive: true,
+                scales: {
+                    y: { beginAtZero: false, title: { display: true, text: '加速度 (m/s²)' } },
+                    x: { title: { display: true, text: '時間 (s)' } }
+                },
+                animation: { duration: 0 },
+                plugins: {
+                    legend: { display: true, position: 'top' }
                 }
             }
         });
-       
-        // 更新圖表數據
+
+        const importGyroChart = new Chart(importGyroCtx, {
+            type: 'line',
+            data: { labels: [], datasets: [] },
+            options: {
+                responsive: true,
+                scales: {
+                    y: { beginAtZero: false, title: { display: true, text: '角速度 (degree/s)' } },
+                    x: { title: { display: true, text: '時間 (s)' } }
+                },
+                animation: { duration: 0 },
+                plugins: {
+                    legend: { display: true, position: 'top' }
+                }
+            }
+        });
+
+        // ==================== Live Chart Update ====================
         function updateCharts() {
-            // 限制數據點數量
             if (data.accelX.length > MAX_DATA_POINTS) {
                 const removeCount = data.accelX.length - MAX_DATA_POINTS;
                 data.timestamps.splice(0, removeCount);
@@ -267,16 +295,14 @@
                 data.accelY.splice(0, removeCount);
                 data.accelZ.splice(0, removeCount);
             }
-           
-            // 更新加速度圖表
             accelChart.data.labels = data.timestamps.slice(-MAX_DATA_POINTS);
             accelChart.data.datasets[0].data = data.accelX.slice(-MAX_DATA_POINTS);
             accelChart.data.datasets[1].data = data.accelY.slice(-MAX_DATA_POINTS);
             accelChart.data.datasets[2].data = data.accelZ.slice(-MAX_DATA_POINTS);
             accelChart.update('none');
         }
+
         function updateCharts2() {
-            // 限制數據點數量
             if (data.gyroX.length > MAX_DATA_POINTS) {
                 const removeCount = data.gyroX.length - MAX_DATA_POINTS;
                 data.timestamps.splice(0, removeCount);
@@ -284,8 +310,6 @@
                 data.gyroY.splice(0, removeCount);
                 data.gyroZ.splice(0, removeCount);
             }
-           
-            // 更新陀螺儀圖表
             gyroChart.data.labels = data.timestamps.slice(-MAX_DATA_POINTS);
             gyroChart.data.datasets[0].data = data.gyroX.slice(-MAX_DATA_POINTS);
             gyroChart.data.datasets[1].data = data.gyroY.slice(-MAX_DATA_POINTS);
@@ -293,16 +317,11 @@
             gyroChart.update('none');
         }
 
-        // Reset everything (called on disconnect)
         function resetDataAndCharts() {
             startTime = null;
             data = {
-                accelX: [],
-                accelY: [],
-                accelZ: [],
-                gyroX: [],
-                gyroY: [],
-                gyroZ: [],
+                accelX: [], accelY: [], accelZ: [],
+                gyroX: [], gyroY: [], gyroZ: [],
                 timestamps: []
             };
             readingData = [];
@@ -312,7 +331,6 @@
                 gyroX: 0, gyroY: 0, gyroZ: 0
             };
 
-            // Clear charts
             accelChart.data.labels = [];
             accelChart.data.datasets.forEach(ds => ds.data = []);
             accelChart.update('none');
@@ -321,42 +339,256 @@
             gyroChart.data.datasets.forEach(ds => ds.data = []);
             gyroChart.update('none');
         }
-       
-        const MAX_LINES = 100; // 最大行数
 
-        // Toggle Smoothing Button
+        // ==================== Imported Charts Update ====================
+        function rebuildImportedCharts() {
+            // Collect all unique timestamps (sorted) for a common x-axis
+            let allTimestamps = new Set();
+            importedDatasets.forEach(ds => {
+                if (ds.visible) {
+                    ds.timestamps.forEach(t => allTimestamps.add(t));
+                }
+            });
+            const sortedLabels = Array.from(allTimestamps).sort((a, b) => a - b);
+
+            // Build datasets
+            const accelDatasets = [];
+            const gyroDatasets = [];
+
+            importedDatasets.forEach((ds, fileIdx) => {
+                if (!ds.visible) return;
+
+                const colors = fileColors[fileIdx % fileColors.length];
+                const shortName = ds.name.length > 20 ? ds.name.substring(0, 17) + '...' : ds.name;
+
+                // Map data to the common labels (simple nearest or exact match)
+                // For simplicity we use the original timestamps as labels per series
+                // Chart.js can handle different x values if we use {x, y} points
+                // But to keep it simple and aligned, we will use point objects.
+
+                accelDatasets.push({
+                    label: `${shortName} - X`,
+                    data: ds.timestamps.map((t, i) => ({ x: t, y: ds.accelX[i] })),
+                    borderColor: colors.x,
+                    backgroundColor: colors.x.replace('rgb', 'rgba').replace(')', ', 0.1)'),
+                    borderWidth: 2,
+                    tension: 0.1,
+                    pointRadius: 0
+                });
+                accelDatasets.push({
+                    label: `${shortName} - Y`,
+                    data: ds.timestamps.map((t, i) => ({ x: t, y: ds.accelY[i] })),
+                    borderColor: colors.y,
+                    backgroundColor: colors.y.replace('rgb', 'rgba').replace(')', ', 0.1)'),
+                    borderWidth: 2,
+                    tension: 0.1,
+                    pointRadius: 0
+                });
+                accelDatasets.push({
+                    label: `${shortName} - Z`,
+                    data: ds.timestamps.map((t, i) => ({ x: t, y: ds.accelZ[i] })),
+                    borderColor: colors.z,
+                    backgroundColor: colors.z.replace('rgb', 'rgba').replace(')', ', 0.1)'),
+                    borderWidth: 2,
+                    tension: 0.1,
+                    pointRadius: 0
+                });
+
+                gyroDatasets.push({
+                    label: `${shortName} - X`,
+                    data: ds.timestamps.map((t, i) => ({ x: t, y: ds.gyroX[i] })),
+                    borderColor: colors.x,
+                    backgroundColor: colors.x.replace('rgb', 'rgba').replace(')', ', 0.1)'),
+                    borderWidth: 2,
+                    tension: 0.1,
+                    pointRadius: 0
+                });
+                gyroDatasets.push({
+                    label: `${shortName} - Y`,
+                    data: ds.timestamps.map((t, i) => ({ x: t, y: ds.gyroY[i] })),
+                    borderColor: colors.y,
+                    backgroundColor: colors.y.replace('rgb', 'rgba').replace(')', ', 0.1)'),
+                    borderWidth: 2,
+                    tension: 0.1,
+                    pointRadius: 0
+                });
+                gyroDatasets.push({
+                    label: `${shortName} - Z`,
+                    data: ds.timestamps.map((t, i) => ({ x: t, y: ds.gyroZ[i] })),
+                    borderColor: colors.z,
+                    backgroundColor: colors.z.replace('rgb', 'rgba').replace(')', ', 0.1)'),
+                    borderWidth: 2,
+                    tension: 0.1,
+                    pointRadius: 0
+                });
+            });
+
+            // Switch to linear x scale for proper time alignment
+            importAccelChart.options.scales.x = {
+                type: 'linear',
+                title: { display: true, text: '時間 (s)' }
+            };
+            importGyroChart.options.scales.x = {
+                type: 'linear',
+                title: { display: true, text: '時間 (s)' }
+            };
+
+            importAccelChart.data.datasets = accelDatasets;
+            importAccelChart.update();
+
+            importGyroChart.data.datasets = gyroDatasets;
+            importGyroChart.update();
+        }
+
+        function updateImportedFileListUI() {
+            const list = document.getElementById('importedFileList');
+            list.innerHTML = '';
+
+            if (importedDatasets.length === 0) {
+                list.innerHTML = '<em>尚未匯入任何檔案</em>';
+                return;
+            }
+
+            importedDatasets.forEach((ds, idx) => {
+                const div = document.createElement('div');
+                div.className = 'file-item';
+                div.innerHTML = `
+                    <input type="checkbox" id="vis_${idx}" ${ds.visible ? 'checked' : ''}>
+                    <label for="vis_${idx}">${ds.name} (${ds.timestamps.length} 點)</label>
+                `;
+                list.appendChild(div);
+
+                document.getElementById(`vis_${idx}`).addEventListener('change', (e) => {
+                    importedDatasets[idx].visible = e.target.checked;
+                    rebuildImportedCharts();
+                });
+            });
+        }
+
+        // ==================== CSV Parsing ====================
+        function parseCsvText(text, filename) {
+            const lines = text.trim().split(/\r?\n/);
+            if (lines.length < 2) {
+                alert(`檔案 ${filename} 內容過少`);
+                return null;
+            }
+
+            // Skip header
+            const rows = lines.slice(1);
+            const timestamps = [];
+            const accelX = [], accelY = [], accelZ = [];
+            const gyroX = [], gyroY = [], gyroZ = [];
+
+            for (const line of rows) {
+                if (!line.trim()) continue;
+                const cols = line.split(',');
+                if (cols.length < 7) continue;
+
+                const t = parseFloat(cols[0]);
+                const ax = parseFloat(cols[1]);
+                const ay = parseFloat(cols[2]);
+                const az = parseFloat(cols[3]);
+                const gx = parseFloat(cols[4]);
+                const gy = parseFloat(cols[5]);
+                const gz = parseFloat(cols[6]);
+
+                if (isNaN(t) || isNaN(ax) || isNaN(ay) || isNaN(az) ||
+                    isNaN(gx) || isNaN(gy) || isNaN(gz)) continue;
+
+                timestamps.push(t);
+                accelX.push(ax);
+                accelY.push(ay);
+                accelZ.push(az);
+                gyroX.push(gx);
+                gyroY.push(gy);
+                gyroZ.push(gz);
+            }
+
+            if (timestamps.length === 0) {
+                alert(`檔案 ${filename} 沒有有效數據`);
+                return null;
+            }
+
+            return {
+                name: filename,
+                timestamps,
+                accelX, accelY, accelZ,
+                gyroX, gyroY, gyroZ,
+                visible: true
+            };
+        }
+
+        // ==================== Import Handlers ====================
+        document.getElementById('importCsvBtn').addEventListener('click', () => {
+            if (isReading || port) {
+                alert('請先斷開串口連接再匯入 CSV');
+                return;
+            }
+            document.getElementById('csvFileInput').click();
+        });
+
+        document.getElementById('csvFileInput').addEventListener('change', async (e) => {
+            const files = Array.from(e.target.files);
+            if (files.length === 0) return;
+
+            if (importedDatasets.length + files.length > MAX_IMPORTED_FILES) {
+                alert(`最多只能匯入 ${MAX_IMPORTED_FILES} 個檔案`);
+                e.target.value = '';
+                return;
+            }
+
+            for (const file of files) {
+                if (importedDatasets.length >= MAX_IMPORTED_FILES) break;
+
+                try {
+                    const text = await file.text();
+                    const dataset = parseCsvText(text, file.name);
+                    if (dataset) {
+                        importedDatasets.push(dataset);
+                    }
+                } catch (err) {
+                    console.error(err);
+                    alert(`讀取檔案 ${file.name} 失敗`);
+                }
+            }
+
+            updateImportedFileListUI();
+            rebuildImportedCharts();
+            e.target.value = ''; // allow re-selecting same files
+        });
+
+        document.getElementById('clearImportedBtn').addEventListener('click', () => {
+            importedDatasets = [];
+            updateImportedFileListUI();
+            rebuildImportedCharts();
+        });
+
+        // ==================== Serial Monitor & Live Parsing ====================
+        const MAX_LINES = 100;
+
         document.getElementById('toggleSmoothingBtn').addEventListener('click', () => {
             isSmoothingEnabled = !isSmoothingEnabled;
             const btn = document.getElementById('toggleSmoothingBtn');
             btn.textContent = isSmoothingEnabled ? '平滑濾波：開啟' : '平滑濾波：關閉';
         });
 
-        // 显示串口数据到监视器
         function appendToSerialMonitor(text) {
             const serialContent = document.getElementById('serialContent');
-           
-            // 添加新行到监视器
             serialContent.textContent += text;
-            // 保留最近 50 行
             const lines = serialContent.textContent.split('\n');
             if (lines.length > MAX_LINES) {
                 serialContent.textContent = lines.slice(lines.length - MAX_LINES).join('\n');
             }
-            // 自动滚动到底部
             serialContent.scrollTop = serialContent.scrollHeight;
         }
 
-        // 定时清理网页缓存（每60秒清理一次）
         setInterval(() => {
             if ('caches' in window) {
                 caches.keys().then(cacheNames => {
-                    cacheNames.forEach(cacheName => {
-                        caches.delete(cacheName);
-                    });
+                    cacheNames.forEach(cacheName => caches.delete(cacheName));
                 });
-                console.log('网页缓存已清理！');
             }
-        }, 60000); // 60000 毫秒 = 60 秒
+        }, 60000);
 
         function calculateAverage(property) {
             if (readingData.length === 0) return 0;
@@ -376,7 +608,6 @@
                                         .map(item => parseFloat(item))
                                         .filter(num => !isNaN(num));
                     if (values.length >= 6) {
-                        // Start timer on first valid packet
                         if (startTime === null) {
                             startTime = performance.now();
                         }
@@ -386,10 +617,8 @@
                                             gyroX: rawGX, gyroY: rawGY, gyroZ: rawGZ });
                         if (readingData.length > 5) readingData.shift();
 
-                        // Elapsed time in seconds with 3 decimal places
                         const elapsedSec = ((performance.now() - startTime) / 1000).toFixed(3);
 
-                        // Calculate scaled averages
                         let accelX = calculateAverage('accelX') * 0.00980665;
                         let accelY = calculateAverage('accelY') * 0.00980665;
                         let accelZ = calculateAverage('accelZ') * 0.00980665;
@@ -397,7 +626,6 @@
                         let gyroY = calculateAverage('gyroY') * 0.001;
                         let gyroZ = calculateAverage('gyroZ') * 0.001;
 
-                        // Apply Exponential Moving Average (EMA) if smoothing is enabled
                         if (isSmoothingEnabled) {
                             smoothed.accelX = smoothed.accelX * (1 - smoothingAlpha) + accelX * smoothingAlpha;
                             smoothed.accelY = smoothed.accelY * (1 - smoothingAlpha) + accelY * smoothingAlpha;
@@ -421,7 +649,6 @@
                         }
                         data.timestamps.push(elapsedSec);
 
-                        // Limit data points
                         if (data.accelX.length > MAX_DATA_POINTS) {
                             data.accelX.shift(); data.accelY.shift(); data.accelZ.shift();
                             data.gyroX.shift(); data.gyroY.shift(); data.gyroZ.shift();
@@ -434,12 +661,8 @@
             }
         }
 
-        // Function to export data to CSV
         function exportToCsv() {
-            // Define CSV headers
             const headers = ['Timestamp (s)', 'AccelX', 'AccelY', 'AccelZ', 'GyroX', 'GyroY', 'GyroZ'];
-           
-            // Combine data into rows
             const rows = data.timestamps.map((timestamp, index) => {
                 return [
                     timestamp,
@@ -451,15 +674,9 @@
                     data.gyroZ[index]
                 ].join(',');
             });
-           
-            // Create CSV content
             const csvContent = [headers.join(','), ...rows].join('\n');
-           
-            // Create a Blob for download
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
-           
-            // Create a temporary link to trigger download
             const link = document.createElement('a');
             link.setAttribute('href', url);
             link.setAttribute('download', 'imu_data.csv');
@@ -469,17 +686,11 @@
             URL.revokeObjectURL(url);
         }
        
-        // 讀取串口數據
         async function readSerialData() {
             try {
                 while (port && isReading) {
                     const { value, done } = await reader.read();
-                    if (done) {
-                        console.log('串口讀取完成');
-                        break;
-                    }
-                   
-                    // 將接收到的數據轉換為文本
+                    if (done) break;
                     const text = new TextDecoder().decode(value);
                     parseSerialData(text);
                 }
@@ -488,37 +699,25 @@
                 document.getElementById('status').textContent = '讀取錯誤: ' + error.message;
                 document.getElementById('status').className = 'disconnected';
                 isReading = false;
-               
-                // 嘗試重新連接
                 if (port) {
                     setTimeout(() => {
-                        if (isReading) {
-                            console.log('嘗試重新連接...');
-                            readSerialData();
-                        }
+                        if (isReading) readSerialData();
                     }, 1000);
                 }
             }
-           
-            if (reader) {
-                reader.releaseLock();
-            }
+            if (reader) reader.releaseLock();
         }
        
-        // 連接串口
         document.getElementById('connectBtn').addEventListener('click', async () => {
             try {
                 port = await navigator.serial.requestPort();
                 await port.open({ baudRate: 115200 });
-               
                 reader = port.readable.getReader();
                 isReading = true;
-               
                 document.getElementById('status').textContent = '已連接';
                 document.getElementById('status').className = 'connected';
-               
+                document.getElementById('importCsvBtn').disabled = true;
                 readSerialData();
-               
             } catch (error) {
                 console.error('串口連接錯誤:', error);
                 document.getElementById('status').textContent = '連接錯誤: ' + error.message;
@@ -526,42 +725,31 @@
             }
         });
        
-        // 斷開串口連接
         document.getElementById('disconnectBtn').addEventListener('click', async () => {
             isReading = false;
-           
             if (reader) {
-                try {
-                    await reader.cancel();
-                } catch (error) {
-                    console.error('取消讀取錯誤:', error);
-                }
+                try { await reader.cancel(); } catch (e) {}
                 reader.releaseLock();
                 reader = null;
             }
-           
             if (port) {
-                try {
-                    await port.close();
-                } catch (error) {
-                    console.error('關閉串口錯誤:', error);
-                }
+                try { await port.close(); } catch (e) {}
                 port = null;
             }
-           
-            // Reset timer and graphs
             resetDataAndCharts();
-
             document.getElementById('status').textContent = '未連接';
             document.getElementById('status').className = 'disconnected';
+            document.getElementById('importCsvBtn').disabled = false;
         });
 
         document.getElementById('exportCsvButton').addEventListener('click', exportToCsv);
        
-        // 清除串口監視器內容
         document.getElementById('clearSerialBtn').addEventListener('click', () => {
             document.getElementById('serialContent').textContent = '';
         });
+
+        // Initial UI
+        updateImportedFileListUI();
     </script>
 </body>
 </html>
