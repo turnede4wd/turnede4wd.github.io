@@ -134,7 +134,7 @@
         let reader = null;
         let isReading = false;
         let readingData = [];
-       
+        let currentPacket = {};
         let isSmoothingEnabled = true;
         const smoothingAlpha = 0.28; // Smoothing strength (0.1 = strong, 0.5 = light)
         let smoothed = {
