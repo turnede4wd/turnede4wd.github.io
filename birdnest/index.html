@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🪹 鳥巢生態智慧監控面板</title>
+    <!-- 引入 Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        :root {
+            --bg-gradient: linear-gradient(135deg, #eef2f0 0%, #e2e8e5 100%);
+            --glass-bg: rgba(255, 255, 255, 0.65);
+            --glass-border: rgba(255, 255, 255, 0.8);
+            --glass-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.06);
+
+            --text-title: #2c3e35;
+            --text-sub: #5a6b62;
+
+            /* 棕黃色/木製質感色彩配置 */
+            --wood-primary: #5d4037;
+            --wood-accent: #8d6e63;
+            --wood-highlight: #a1887f;
+            --wood-bg: rgba(215, 204, 200, 0.3);
+
+            --border-radius-lg: 20px;
+            --border-radius-md: 12px;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: var(--bg-gradient);
+            background-attachment: fixed;
+            min-height: 100vh;
+            color: var(--text-title);
+            padding: 24px 16px;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        /* 頂部標題列 */
+        header {
+            text-align: center;
+            margin-bottom: 28px;
+        }
+
+        header h1 {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: var(--text-title);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            letter-spacing: 0.5px;
+        }
+
+        header p {
+            font-size: 0.9rem;
+            color: var(--text-sub);
+            margin-top: 6px;
+        }
+
+        /* 磨砂玻璃通用卡片樣式 */
+        .glass-card {
+            background: var(--glass-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--border-radius-lg);
+            box-shadow: var(--glass-shadow);
+        }
+
+        .section-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--text-title);
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* ===== 上層：主要影像區域 ===== */
+        .hero-section {
+            padding: 20px;
+            margin-bottom: 24px;
+        }
+
+        .main-image-container {
+            width: 100%;
+            height: 420px;
+            background: #1e2622;
+            border-radius: var(--border-radius-md);
+            overflow: hidden;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .main-image-container img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        .status-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 14px;
+            padding: 0 4px;
+        }
+
+        .time-badge {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.85rem;
+            color: var(--text-sub);
+            font-weight: 500;
+        }
+
+        .live-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(46, 125, 50, 0.12);
+            color: #2e7d32;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .live-dot {
+            width: 8px;
+            height: 8px;
+            background-color: #2e7d32;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% {
+                opacity: 1;
+                transform: scale(1);
+            }
+
+            50% {
+                opacity: 0.4;
+                transform: scale(1.2);
+            }
+
+            100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
+        /* ===== 中層：環境傳感器數據 (Grid RWD) ===== */
+        .sensors-section {
+            margin-bottom: 28px;
+        }
+
+        .sensors-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 16px;
+        }
+
+        .sensor-card {
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--border-radius-md);
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            box-shadow: var(--glass-shadow);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .sensor-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 24px 0 rgba(31, 38, 135, 0.08);
+        }
+
+        .sensor-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+
+        .sensor-icon-box {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            background: var(--wood-bg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--wood-primary);
+        }
+
+        .sensor-title {
+            font-size: 0.85rem;
+            color: var(--text-sub);
+            font-weight: 500;
+        }
+
+        /* 棕黃色木製質感數據文字 */
+        .sensor-value-group {
+            text-align: right;
+            margin-top: 8px;
+        }
+
+        .sensor-value {
+            font-size: 1.8rem;
+            font-weight: 800;
+            color: var(--wood-primary);
+            font-family: "Georgia", "Times New Roman", serif;
+            /* 帶有些許人文木質質感的字體 */
+            line-height: 1.1;
+            letter-spacing: -0.5px;
+            text-shadow: 0 1px 1px rgba(255, 255, 255, 0.8);
+        }
+
+        .sensor-unit {
+            font-size: 0.8rem;
+            color: var(--wood-accent);
+            font-weight: 600;
+            margin-left: 2px;
+        }
+
+        /* ===== 下層：歷史數據 (縮小展示 Grid) ===== */
+        .history-section {
+            padding: 20px;
+        }
+
+        .history-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 14px;
+        }
+
+        .history-card {
+            background: rgba(255, 255, 255, 0.45);
+            border: 1px solid rgba(255, 255, 255, 0.6);
+            border-radius: var(--border-radius-md);
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            transition: all 0.2s ease;
+        }
+
+        .history-card:hover {
+            background: rgba(255, 255, 255, 0.75);
+            transform: scale(1.02);
+        }
+
+        .history-thumb {
+            width: 100%;
+            height: 100px;
+            background: #2a332e;
+            border-radius: 8px;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .history-thumb img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .history-time {
+            font-size: 0.75rem;
+            color: var(--text-sub);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .history-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+        }
+
+        .history-tag {
+            background: var(--wood-bg);
+            color: var(--wood-primary);
+            font-size: 0.7rem;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+
+        /* 載入中與空狀態 */
+        .loading-box {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-sub);
+        }
+
+        .spinner {
+            width: 32px;
+            height: 32px;
+            border: 3px solid rgba(93, 64, 55, 0.2);
+            border-top-color: var(--wood-primary);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 12px;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* 響應式調整 */
+        @media (max-width: 600px) {
+            body {
+                padding: 12px 8px;
+            }
+
+            .main-image-container {
+                height: 260px;
+            }
+
+            .sensors-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .sensor-value {
+                font-size: 1.4rem;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <!-- 頁頭 -->
+        <header>
+            <h1><i data-lucide="bird"></i> 鳥巢生態智慧監控</h1>
+            <p>即時環境氣候與影像數據面板</p>
+        </header>
+
+        <!-- 主內容容器 -->
+        <div id="app-container">
+            <div class="glass-card loading-box">
+                <div class="spinner"></div>
+                正在連線鳥巢雲端數據庫...
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // API URL
+        const apiUrl = "https://script.google.com/macros/s/AKfycby2rx-m9oCMwHbOZSo2AiCdC5rPpSvefZwqUS65WX-ej33FMUtkrdct1Y9DL5Av5cL1/exec";
+
+        // 感測器圖標對映對象 (預設使用通用圖標)
+        const sensorIconMap = {
+            '溫濕度': 'thermometer',
+            '溫度': 'thermometer',
+            'Temperature': 'thermometer',
+            '濕度': 'droplets',
+            'Humidity': 'droplets',
+            '光照': 'sun',
+            '光強': 'sun',
+            'Light': 'sun',
+            '氣壓': 'gauge',
+            'Pressure': 'gauge',
+            '聲音': 'mic',
+            'Sound': 'mic',
+            '電量': 'battery-charging',
+            'Battery': 'battery-charging'
+        };
+
+        function getSensorIcon(name) {
+            if (!name) return 'activity';
+            for (let key in sensorIconMap) {
+                if (name.includes(key)) return sensorIconMap[key];
+            }
+            return 'activity';
+        }
+
+        function formatBase64Image(msg) {
+            if (!msg || msg.trim() === "") return null;
+            return msg.startsWith("data:image") ? msg : `data:image/jpeg;base64,${msg}`;
+        }
+
+        async function fetchData() {
+            try {
+                const response = await fetch(apiUrl);
+                const data = await response.json();
+                const container = document.getElementById('app-container');
+
+                if (!data || data.length === 0) {
+                    container.innerHTML = `
+                        <div class="glass-card loading-box">
+                            <i data-lucide="inbox" style="width:40px; height:40px; stroke-width:1.5;"></i>
+                            <p style="margin-top:10px;">目前尚無鳥巢監控紀錄</p>
+                        </div>`;
+                    lucide.createIcons();
+                    return;
+                }
+
+                const reversedData = [...data].reverse();
+                const latest = reversedData[0];
+                const history = reversedData.slice(1);
+
+                const latestImgSrc = formatBase64Image(latest.message);
+                const latestTime = latest.time ? new Date(latest.time).toLocaleString() : "時間未知";
+
+                let html = `
+                    <!-- 1. 上層：主要監控影像 -->
+                    <section class="glass-card hero-section">
+                        <div class="section-title">
+                            <i data-lucide="video"></i> 鳥巢實況影像
+                        </div>
+                        <div class="main-image-container">
+                            ${latestImgSrc ?
+                        `<img src="${latestImgSrc}" alt="鳥巢最新影像" onerror="this.parentElement.innerHTML='<span style=\\'color:#aaa;\\'>影像解碼失敗</span>';">` :
+                        `<span style="color:#888;">目前無鏡頭影像傳輸</span>`
+                    }
+                        </div>
+                        <div class="status-bar">
+                            <div class="time-badge">
+                                <i data-lucide="clock" style="width:14px; height:14px;"></i>
+                                更新時間：${latestTime}
+                            </div>
+                            <div class="live-tag">
+                                <div class="live-dot"></div> 系統連線中
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- 2. 中層：環境傳感器數據 (Grid) -->
+                    <section class="sensors-section">
+                        <div class="section-title">
+                            <i data-lucide="leaf"></i> 鳥巢即時環境微氣候
+                        </div>
+                        ${renderSensorsGrid(latest.sensors)}
+                    </section>
+                `;
+
+                // 3. 下層：歷史紀錄
+                if (history.length > 0) {
+                    html += `
+                        <section class="glass-card history-section">
+                            <div class="section-title">
+                                <i data-lucide="history"></i> 歷程紀錄紀錄 (${history.length})
+                            </div>
+                            <div class="history-grid">
+                    `;
+
+                    history.forEach(item => {
+                        const hImg = formatBase64Image(item.message);
+                        const hTime = item.time ? new Date(item.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "--:--";
+
+                        html += `
+                            <div class="history-card">
+                                <div class="history-thumb">
+                                    ${hImg ? `<img src="${hImg}" alt="歷史影像">` : `<span style="font-size:0.7rem; color:#888;">無影像</span>`}
+                                </div>
+                                <div class="history-time">
+                                    <i data-lucide="clock" style="width:12px; height:12px;"></i> ${hTime}
+                                </div>
+                                ${renderHistoryTags(item.sensors)}
+                            </div>
+                        `;
+                    });
+
+                    html += `
+                            </div>
+                        </section>
+                    `;
+                }
+
+                container.innerHTML = html;
+
+                // 渲染 Lucide 圖標
+                lucide.createIcons();
+
+            } catch (error) {
+                console.error("讀取資料失敗:", error);
+                document.getElementById('app-container').innerHTML = `
+                    <div class="glass-card loading-box" style="color: #c62828;">
+                        <i data-lucide="alert-triangle" style="width:40px; height:40px;"></i>
+                        <p style="margin-top:10px;">雲端資料庫連線失敗，請稍後再試。</p>
+                    </div>`;
+                lucide.createIcons();
+            }
+        }
+
+        // 渲染主傳感器 Grid HTML
+        function renderSensorsGrid(sensors) {
+            if (!sensors || !Array.isArray(sensors) || sensors.length === 0) {
+                return `
+                    <div class="glass-card" style="padding:20px; text-align:center; color:var(--text-sub);">
+                        尚未接收到環境傳感器數據
+                    </div>`;
+            }
+
+            let cardsHtml = sensors.map(s => {
+                const iconName = getSensorIcon(s.name);
+                const name = s.name || '環境指標';
+                const value = s.value !== undefined ? s.value : '--';
+                const unit = s.unit || '';
+
+                return `
+                    <div class="sensor-card">
+                        <div class="sensor-header">
+                            <span class="sensor-title">${name}</span>
+                            <div class="sensor-icon-box">
+                                <i data-lucide="${iconName}" style="width:20px; height:20px;"></i>
+                            </div>
+                        </div>
+                        <div class="sensor-value-group">
+                            <span class="sensor-value">${value}</span>
+                            <span class="sensor-unit">${unit}</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            return `<div class="sensors-grid">${cardsHtml}</div>`;
+        }
+
+        // 渲染歷史數據的小標籤
+        function renderHistoryTags(sensors) {
+            if (!sensors || !Array.isArray(sensors) || sensors.length === 0) return '';
+
+            const tags = sensors.map(s => `
+                <span class="history-tag">${s.name || '感測'}: ${s.value}${s.unit || ''}</span>
+            `).join('');
+
+            return `<div class="history-tags">${tags}</div>`;
+        }
+
+        // 初始化載入
+        fetchData();
+
+        // 定時 5 秒刷新
+        setInterval(fetchData, 5000);
+    </script>
+</body>
+
+</html>
