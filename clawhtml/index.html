@@ -4,13 +4,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ESP32-CAM 影像監控面板</title>
+    <title>ESP32-CAM 10鏡頭多功能監控面板</title>
     <style>
         :root {
             --bg-color: #f4f6f9;
             --card-color: #ffffff;
             --text-color: #333333;
             --primary-color: #007bff;
+            --border-color: #e0e0e0;
         }
 
         body {
@@ -22,149 +23,294 @@
             color: var(--text-color);
         }
 
-        .gallery {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-            gap: 20px;
+        h1 {
+            text-align: center;
+            font-size: 1.5rem;
+            margin-bottom: 20px;
         }
 
-        .image-card {
+        /* 控制列 */
+        .control-panel {
             background: var(--card-color);
-            padding: 15px;
+            padding: 15px 20px;
             border-radius: 12px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            margin-bottom: 20px;
             display: flex;
-            flex-direction: column;
             align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
         }
 
-        /* 第一張（最新的）圖片放大顯示於最頂部 */
-        .image-card.featured {
-            grid-column: 1 / -1;
-        }
-
-        .image-card.featured .image-wrapper {
-            height: 400px;
-        }
-
-        .image-card.featured .time-tag {
-            font-size: 1.05em;
+        .control-panel label {
             font-weight: 600;
         }
 
-        .image-wrapper {
+        select {
+            padding: 8px 12px;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            font-size: 1rem;
+            outline: none;
+            cursor: pointer;
+            background-color: #fff;
+        }
+
+        /* 卡片區域 */
+        .section-card {
+            background: var(--card-color);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            margin-bottom: 20px;
+        }
+
+        .section-title {
+            font-size: 1.1rem;
+            font-weight: bold;
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        /* 最新畫面：自適應尺寸容器 */
+        .image-container {
             width: 100%;
-            height: 180px;
+            max-height: 70vh; /* 防止過高超出螢幕 */
             background: #000;
             border-radius: 8px;
             overflow: hidden;
             display: flex;
             align-items: center;
             justify-content: center;
+            min-height: 250px;
+            position: relative;
         }
 
-        .image-card img {
+        .image-container img {
             width: 100%;
-            height: 100%;
-            object-fit: contain;
-            background: #000;
+            height: auto;
+            max-height: 70vh;
+            object-fit: contain; /* 自適應等比例縮放 */
+            display: block;
         }
 
-        .time-tag {
-            margin-top: 12px;
-            font-size: 0.9em;
+        .time-display {
+            margin-top: 10px;
+            font-size: 0.95rem;
             color: #666;
+            text-align: right;
             font-weight: 500;
         }
 
-        /* 讀取中動畫 */
-        .loading {
-            grid-column: 1 / -1;
-            text-align: center;
-            padding: 40px;
-            font-size: 1.2em;
-            color: #666;
+        /* 加載指示器 */
+        .loading-overlay {
+            position: absolute;
+            color: #fff;
+            background: rgba(0, 0, 0, 0.6);
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.95rem;
         }
 
         .spinner {
-            border: 4px solid rgba(0, 0, 0, 0.1);
-            width: 36px;
-            height: 36px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            width: 30px;
+            height: 30px;
             border-radius: 50%;
-            border-left-color: var(--primary-color);
+            border-left-color: #fff;
             animation: spin 1s linear infinite;
-            margin: 0 auto 10px;
+            margin-bottom: 8px;
         }
 
         @keyframes spin {
-            0% {
-                transform: rotate(0deg);
-            }
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
 
-            100% {
-                transform: rotate(360deg);
-            }
+        /* 歷史記錄選擇器 */
+        .history-controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+            margin-bottom: 15px;
+        }
+
+        .history-controls select {
+            flex-grow: 1;
         }
     </style>
 </head>
 
 <body>
 
-    <div id="gallery-container" class="gallery">
-        <div class="loading">
-            <div class="spinner"></div>
-            正在同步雲端影像...
+    <h1>📷 ESP32-CAM 影像監控面板</h1>
+
+    <!-- 1. 鏡頭選擇列 -->
+    <div class="control-panel">
+        <label for="camera-select">選擇鏡頭：</label>
+        <select id="camera-select" onchange="onCameraChange()">
+            <option value="1">鏡頭 1 (Columns 1-2)</option>
+            <option value="2">鏡頭 2 (Columns 3-4)</option>
+            <option value="3">鏡頭 3 (Columns 5-6)</option>
+            <option value="4">鏡頭 4 (Columns 7-8)</option>
+            <option value="5">鏡頭 5 (Columns 9-10)</option>
+            <option value="6">鏡頭 6 (Columns 11-12)</option>
+            <option value="7">鏡頭 7 (Columns 13-14)</option>
+            <option value="8">鏡頭 8 (Columns 15-16)</option>
+            <option value="9">鏡頭 9 (Columns 17-18)</option>
+            <option value="10">鏡頭 10 (Columns 19-20)</option>
+        </select>
+    </div>
+
+    <!-- 2. 最新畫面區域 (自適應) -->
+    <div class="section-card">
+        <div class="section-title">
+            <span>🔴 最新即時畫面</span>
         </div>
+        <div class="image-container" id="latest-container">
+            <div class="loading-overlay" id="latest-loading">
+                <div class="spinner"></div>
+                載入中...
+            </div>
+            <img id="latest-img" src="" alt="最新畫面" style="display: none;" onerror="onImageError(this)">
+        </div>
+        <div class="time-display" id="latest-time">拍攝時間：--</div>
+    </div>
+
+    <!-- 3. 歷史記錄調閱區域 -->
+    <div class="section-card">
+        <div class="section-title">
+            <span>📜 歷史記錄查詢</span>
+        </div>
+        <div class="history-controls">
+            <label for="history-select">選擇記錄時間：</label>
+            <select id="history-select" onchange="onHistoryChange()">
+                <option value="">-- 請先選擇時間 --</option>
+            </select>
+        </div>
+        <div class="image-container" id="history-container">
+            <div class="loading-overlay" id="history-loading" style="display: none;">
+                <div class="spinner"></div>
+                正在讀取歷史畫面...
+            </div>
+            <img id="history-img" src="" alt="歷史畫面" style="display: none;" onerror="onImageError(this)">
+        </div>
+        <div class="time-display" id="history-time">拍攝時間：--</div>
     </div>
 
     <script>
-        // ⚠️ 請在此處替換成您正確的 Google Apps Script 網頁應用程式 URL
-        const apiUrl = "https://script.google.com/macros/s/AKfycbwYAEGinC3fu_avsh2UhsQxKImDOZU0U3oQX5xd4nUlRDuQ3nOuLFOnTOoyvY8EfUtioQ/exec";
+        // ⚠️ 請替換為您部署的 Apps Script Web App URL
+        const apiUrl = "https://script.google.com/macros/s/AKfycbz-QCYUOWpqk4pQ16s5WCvb10t6UNDBqxa4kgpCiRtmlzazmx1kMtXPq0_N_hfxk48/exec";
 
-        async function fetchImages() {
+        let currentCamId = 1;
+
+        // 當切換鏡頭時觸發
+        function onCameraChange() {
+            currentCamId = document.getElementById('camera-select').value;
+            fetchCameraData(currentCamId);
+        }
+
+        // 讀取該鏡頭數據（最新影像 Base64 + 歷史時間表）
+        async function fetchCameraData(camId) {
+            // 重設 UI 狀態
+            showLoading('latest-loading', true);
+            hideImage('latest-img');
+            document.getElementById('latest-time').innerText = "拍攝時間：--";
+            
+            // 清空歷史紀錄
+            const historySelect = document.getElementById('history-select');
+            historySelect.innerHTML = '<option value="">-- 載入歷史列表中 --</option>';
+            hideImage('history-img');
+            document.getElementById('history-time').innerText = "拍攝時間：--";
+
             try {
-                const response = await fetch(apiUrl);
+                const response = await fetch(`${apiUrl}?action=getLogs&camId=${camId}`);
                 const data = await response.json();
-                const container = document.getElementById('gallery-container');
 
-                if (data.length === 0) {
-                    container.innerHTML = '<div class="loading">目前資料庫中沒有影像。</div>';
-                    return;
+                // 1. 渲染最新影像
+                if (data.latest && data.latest.message) {
+                    const latestImg = document.getElementById('latest-img');
+                    latestImg.src = `data:image/jpeg;base64,${data.latest.message}`;
+                    latestImg.style.display = 'block';
+                    document.getElementById('latest-time').innerText = `拍攝時間：${new Date(data.latest.time).toLocaleString()}`;
+                } else {
+                    document.getElementById('latest-time').innerText = "無最新畫面數據";
                 }
 
-                container.innerHTML = ''; // 清空舊資料
+                // 2. 渲染歷史紀錄下拉選項（反轉讓最新的歷史時間排在前面）
+                historySelect.innerHTML = '<option value="">-- 請選擇要查看的時間 --</option>';
+                if (data.history && data.history.length > 0) {
+                    const reversedHistory = data.history.reverse();
+                    reversedHistory.forEach(item => {
+                        const option = document.createElement('option');
+                        option.value = item.row;
+                        option.textContent = new Date(item.time).toLocaleString();
+                        historySelect.appendChild(option);
+                    });
+                } else {
+                    historySelect.innerHTML = '<option value="">-- 無歷史記錄 --</option>';
+                }
 
-                // 反轉陣列，使最新的圖片排在第一位
-                const reversedData = data.reverse().filter(item => item.message && item.message.trim() !== "");
-
-                reversedData.forEach((item, index) => {
-                    const card = document.createElement('div');
-                    
-                    // 第一張圖片加上 .featured 標籤以實現放大樣式
-                    card.className = index === 0 ? 'image-card featured' : 'image-card';
-
-                    const imgSrc = `data:image/jpeg;base64,${item.message}`;
-
-                    card.innerHTML = `
-                        <div class="image-wrapper">
-                            <img src="${imgSrc}" alt="ESP32 Cam Image" onerror="this.onerror=null; this.parentElement.innerHTML='<span style=\'color:#999;\'>圖片解析失敗</span>';">
-                        </div>
-                        <div class="time-tag">${new Date(item.time).toLocaleString()}</div>
-                    `;
-                    container.appendChild(card);
-                });
             } catch (error) {
-                console.error("讀取影像失敗:", error);
-                document.getElementById('gallery-container').innerHTML =
-                    `<div class="loading" style="color: red;">❌ 無法連線至 API，請檢查 URL 或網路設定。</div>`;
+                console.error("獲取資料失敗:", error);
+                document.getElementById('latest-time').innerText = "❌ 資料載入失敗";
+            } finally {
+                showLoading('latest-loading', false);
             }
         }
 
-        // 網頁載入時立刻讀取一次
-        fetchImages();
+        // 當選擇特定歷史時間時，獲取該筆圖片 Base64
+        async function onHistoryChange() {
+            const row = document.getElementById('history-select').value;
+            if (!row) return;
 
-        // 每 5 秒鐘自動重新抓取最新影像
-        setInterval(fetchImages, 5000);
+            showLoading('history-loading', true);
+            hideImage('history-img');
+
+            try {
+                const response = await fetch(`${apiUrl}?action=getImage&camId=${currentCamId}&row=${row}`);
+                const data = await response.json();
+
+                if (data.message) {
+                    const historyImg = document.getElementById('history-img');
+                    historyImg.src = `data:image/jpeg;base64,${data.message}`;
+                    historyImg.style.display = 'block';
+                    document.getElementById('history-time').innerText = `拍攝時間：${new Date(data.time).toLocaleString()}`;
+                } else {
+                    document.getElementById('history-time').innerText = "圖片讀取失敗或資料為空";
+                }
+            } catch (error) {
+                console.error("讀取歷史圖片失敗:", error);
+                document.getElementById('history-time').innerText = "❌ 圖片載入失敗";
+            } finally {
+                showLoading('history-loading', false);
+            }
+        }
+
+        function showLoading(elementId, isShow) {
+            document.getElementById(elementId).style.display = isShow ? 'flex' : 'none';
+        }
+
+        function hideImage(elementId) {
+            const img = document.getElementById(elementId);
+            img.style.display = 'none';
+            img.src = '';
+        }
+
+        function onImageError(imgElement) {
+            imgElement.style.display = 'none';
+            alert('圖片解析失敗，請確認上傳的數據是否為正確的 Base64 格式。');
+        }
+
+        // 初始化：預設讀取鏡頭 1
+        fetchCameraData(currentCamId);
     </script>
 </body>
 
