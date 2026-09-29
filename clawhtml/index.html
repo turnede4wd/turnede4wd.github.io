@@ -15,22 +15,16 @@
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            max-width: 800px;
+            max-width: 900px;
             margin: 0 auto;
             padding: 20px;
             background: var(--bg-color);
             color: var(--text-color);
         }
 
-        h1 {
-            text-align: center;
-            margin-bottom: 30px;
-            color: #2c3e50;
-        }
-
         .gallery {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
             gap: 20px;
         }
 
@@ -44,10 +38,24 @@
             align-items: center;
         }
 
+        /* 第一張（最新的）圖片放大顯示於最頂部 */
+        .image-card.featured {
+            grid-column: 1 / -1;
+        }
+
+        .image-card.featured .image-wrapper {
+            height: 400px;
+        }
+
+        .image-card.featured .time-tag {
+            font-size: 1.05em;
+            font-weight: 600;
+        }
+
         .image-wrapper {
             width: 100%;
-            height: 200px;
-            background: #e9ecef;
+            height: 180px;
+            background: #000;
             border-radius: 8px;
             overflow: hidden;
             display: flex;
@@ -59,9 +67,7 @@
             width: 100%;
             height: 100%;
             object-fit: contain;
-            /* 保持比例，不變形 */
             background: #000;
-            /* 圖片黑底襯托 */
         }
 
         .time-tag {
@@ -104,8 +110,6 @@
 
 <body>
 
-    <h1>📷 ESP32-CAM 實時影像監控</h1>
-
     <div id="gallery-container" class="gallery">
         <div class="loading">
             <div class="spinner"></div>
@@ -128,25 +132,24 @@
                     return;
                 }
 
-                container.innerHTML = ''; // 清空舊資料（包括 Loading 畫面）
+                container.innerHTML = ''; // 清空舊資料
 
-                // 將資料反轉（data.reverse()），讓最新拍到的照片排在網頁最前面
-                data.reverse().forEach(item => {
-                    // 過濾掉可能因為沒傳好造成的空資料
-                    if (!item.message || item.message.trim() === "") return;
+                // 反轉陣列，使最新的圖片排在第一位
+                const reversedData = data.reverse().filter(item => item.message && item.message.trim() !== "");
 
+                reversedData.forEach((item, index) => {
                     const card = document.createElement('div');
-                    card.className = 'image-card';
+                    
+                    // 第一張圖片加上 .featured 標籤以實現放大樣式
+                    card.className = index === 0 ? 'image-card featured' : 'image-card';
 
-                    // 核心重點：利用 Data URI 將 Base64 字串渲染為圖片
-                    // 若您的 ESP32 傳上來的字串已包含 "data:image/jpeg;base64,"，請將下行的開頭前綴刪除
                     const imgSrc = `data:image/jpeg;base64,${item.message}`;
 
                     card.innerHTML = `
                         <div class="image-wrapper">
-                            <img src="${imgSrc}" alt="ESP32 Cam Image" onerror="this.onerror=null; this.parentElement.innerHTML='<span style=\'color:#99s;\'>圖片解析失敗</span>';">
+                            <img src="${imgSrc}" alt="ESP32 Cam Image" onerror="this.onerror=null; this.parentElement.innerHTML='<span style=\'color:#999;\'>圖片解析失敗</span>';">
                         </div>
-                        <div class="time-tag">🕒 ${new Date(item.time).toLocaleString()}</div>
+                        <div class="time-tag">${new Date(item.time).toLocaleString()}</div>
                     `;
                     container.appendChild(card);
                 });
@@ -160,7 +163,7 @@
         // 網頁載入時立刻讀取一次
         fetchImages();
 
-        // 之後每 5 秒鐘自動重新抓取最新影像
+        // 每 5 秒鐘自動重新抓取最新影像
         setInterval(fetchImages, 5000);
     </script>
 </body>
