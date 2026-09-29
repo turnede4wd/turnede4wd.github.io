@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ESP32-CAM 10鏡頭多功能監控面板</title>
+    <title>鏡頭監控面板</title>
     <style>
         :root {
             --bg-color: #f4f6f9;
@@ -21,12 +21,6 @@
             padding: 20px;
             background: var(--bg-color);
             color: var(--text-color);
-        }
-
-        h1 {
-            text-align: center;
-            font-size: 1.5rem;
-            margin-bottom: 20px;
         }
 
         /* 控制列 */
@@ -46,7 +40,7 @@
             font-weight: 600;
         }
 
-        select {
+        select, input[type="date"] {
             padding: 8px 12px;
             border-radius: 6px;
             border: 1px solid var(--border-color);
@@ -63,15 +57,6 @@
             border-radius: 12px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
             margin-bottom: 20px;
-        }
-
-        .section-title {
-            font-size: 1.1rem;
-            font-weight: bold;
-            margin-bottom: 12px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
         }
 
         /* 最新畫面：自適應尺寸容器 */
@@ -136,44 +121,52 @@
         /* 歷史記錄選擇器 */
         .history-controls {
             display: flex;
-            gap: 10px;
+            gap: 15px;
             align-items: center;
             flex-wrap: wrap;
             margin-bottom: 15px;
         }
 
-        .history-controls select {
-            flex-grow: 1;
+        .history-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .history-group label {
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .history-group select, .history-group input {
+            width: 100%;
         }
     </style>
 </head>
 
 <body>
 
-    <h1>📷 ESP32-CAM 影像監控面板</h1>
-
     <!-- 1. 鏡頭選擇列 -->
     <div class="control-panel">
         <label for="camera-select">選擇鏡頭：</label>
         <select id="camera-select" onchange="onCameraChange()">
-            <option value="1">鏡頭 1 (Columns 1-2)</option>
-            <option value="2">鏡頭 2 (Columns 3-4)</option>
-            <option value="3">鏡頭 3 (Columns 5-6)</option>
-            <option value="4">鏡頭 4 (Columns 7-8)</option>
-            <option value="5">鏡頭 5 (Columns 9-10)</option>
-            <option value="6">鏡頭 6 (Columns 11-12)</option>
-            <option value="7">鏡頭 7 (Columns 13-14)</option>
-            <option value="8">鏡頭 8 (Columns 15-16)</option>
-            <option value="9">鏡頭 9 (Columns 17-18)</option>
-            <option value="10">鏡頭 10 (Columns 19-20)</option>
+            <option value="1">鏡頭 1</option>
+            <option value="2">鏡頭 2</option>
+            <option value="3">鏡頭 3</option>
+            <option value="4">鏡頭 4</option>
+            <option value="5">鏡頭 5</option>
+            <option value="6">鏡頭 6</option>
+            <option value="7">鏡頭 7</option>
+            <option value="8">鏡頭 8</option>
+            <option value="9">鏡頭 9</option>
+            <option value="10">鏡頭 10</option>
         </select>
     </div>
 
     <!-- 2. 最新畫面區域 (自適應) -->
     <div class="section-card">
-        <div class="section-title">
-            <span>🔴 最新即時畫面</span>
-        </div>
         <div class="image-container" id="latest-container">
             <div class="loading-overlay" id="latest-loading">
                 <div class="spinner"></div>
@@ -184,16 +177,19 @@
         <div class="time-display" id="latest-time">拍攝時間：--</div>
     </div>
 
-    <!-- 3. 歷史記錄調閱區域 -->
+    <!-- 3. 歷史記錄調閱區域（日曆 + 時間選框） -->
     <div class="section-card">
-        <div class="section-title">
-            <span>📜 歷史記錄查詢</span>
-        </div>
         <div class="history-controls">
-            <label for="history-select">選擇記錄時間：</label>
-            <select id="history-select" onchange="onHistoryChange()">
-                <option value="">-- 請先選擇時間 --</option>
-            </select>
+            <div class="history-group">
+                <label for="history-date">選擇日期：</label>
+                <input type="date" id="history-date" onchange="onDateChange()">
+            </div>
+            <div class="history-group">
+                <label for="history-time-select">選擇時間：</label>
+                <select id="history-time-select" onchange="onTimeChange()" disabled>
+                    <option value="">-- 請先選擇日期 --</option>
+                </select>
+            </div>
         </div>
         <div class="image-container" id="history-container">
             <div class="loading-overlay" id="history-loading" style="display: none;">
@@ -202,19 +198,33 @@
             </div>
             <img id="history-img" src="" alt="歷史畫面" style="display: none;" onerror="onImageError(this)">
         </div>
-        <div class="time-display" id="history-time">拍攝時間：--</div>
+        <div class="time-display" id="history-time-display">拍攝時間：--</div>
     </div>
 
     <script>
         // ⚠️ 請替換為您部署的 Apps Script Web App URL
-        const apiUrl = "https://script.google.com/macros/s/AKfycbz-QCYUOWpqk4pQ16s5WCvb10t6UNDBqxa4kgpCiRtmlzazmx1kMtXPq0_N_hfxk48/exec";
+        const apiUrl = "https://script.google.com/macros/s/AKfycbwYAEGinC3fu_avsh2UhsQxKImDOZU0U3oQX5xd4nUlRDuQ3nOuLFOnTOoyvY8EfUtioQ/exec";
 
         let currentCamId = 1;
+        let globalHistoryList = []; // 儲存當前鏡頭的所有歷史時間點記錄
 
         // 當切換鏡頭時觸發
         function onCameraChange() {
             currentCamId = document.getElementById('camera-select').value;
             fetchCameraData(currentCamId);
+        }
+
+        // 格式化日期為 YYYY-MM-DD
+        function formatDateKey(dateObj) {
+            const y = dateObj.getFullYear();
+            const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+            const d = String(dateObj.getDate()).padStart(2, '0');
+            return `${y}-${m}-${d}`;
+        }
+
+        // 格式化時間為 HH:MM:SS
+        function formatTimeString(dateObj) {
+            return dateObj.toTimeString().split(' ')[0];
         }
 
         // 讀取該鏡頭數據（最新影像 Base64 + 歷史時間表）
@@ -224,11 +234,14 @@
             hideImage('latest-img');
             document.getElementById('latest-time').innerText = "拍攝時間：--";
             
-            // 清空歷史紀錄
-            const historySelect = document.getElementById('history-select');
-            historySelect.innerHTML = '<option value="">-- 載入歷史列表中 --</option>';
+            // 清空歷史紀錄區域
+            document.getElementById('history-date').value = '';
+            const timeSelect = document.getElementById('history-time-select');
+            timeSelect.innerHTML = '<option value="">-- 請先選擇日期 --</option>';
+            timeSelect.disabled = true;
             hideImage('history-img');
-            document.getElementById('history-time').innerText = "拍攝時間：--";
+            document.getElementById('history-time-display').innerText = "拍攝時間：--";
+            globalHistoryList = [];
 
             try {
                 const response = await fetch(`${apiUrl}?action=getLogs&camId=${camId}`);
@@ -244,18 +257,17 @@
                     document.getElementById('latest-time').innerText = "無最新畫面數據";
                 }
 
-                // 2. 渲染歷史紀錄下拉選項（反轉讓最新的歷史時間排在前面）
-                historySelect.innerHTML = '<option value="">-- 請選擇要查看的時間 --</option>';
+                // 2. 解析歷史紀錄列表
                 if (data.history && data.history.length > 0) {
-                    const reversedHistory = data.history.reverse();
-                    reversedHistory.forEach(item => {
-                        const option = document.createElement('option');
-                        option.value = item.row;
-                        option.textContent = new Date(item.time).toLocaleString();
-                        historySelect.appendChild(option);
+                    globalHistoryList = data.history.map(item => {
+                        const d = new Date(item.time);
+                        return {
+                            row: item.row,
+                            fullTime: d,
+                            dateStr: formatDateKey(d),
+                            timeStr: formatTimeString(d)
+                        };
                     });
-                } else {
-                    historySelect.innerHTML = '<option value="">-- 無歷史記錄 --</option>';
                 }
 
             } catch (error) {
@@ -266,9 +278,43 @@
             }
         }
 
-        // 當選擇特定歷史時間時，獲取該筆圖片 Base64
-        async function onHistoryChange() {
-            const row = document.getElementById('history-select').value;
+        // 當使用者選擇日曆日期時觸發
+        function onDateChange() {
+            const selectedDate = document.getElementById('history-date').value;
+            const timeSelect = document.getElementById('history-time-select');
+
+            hideImage('history-img');
+            document.getElementById('history-time-display').innerText = "拍攝時間：--";
+
+            if (!selectedDate) {
+                timeSelect.innerHTML = '<option value="">-- 請先選擇日期 --</option>';
+                timeSelect.disabled = true;
+                return;
+            }
+
+            // 篩選出符合該日期的時間記錄
+            const filteredLogs = globalHistoryList.filter(item => item.dateStr === selectedDate);
+
+            if (filteredLogs.length === 0) {
+                timeSelect.innerHTML = '<option value="">-- 該日期無記錄 --</option>';
+                timeSelect.disabled = true;
+            } else {
+                // 反轉陣列，讓最新拍攝的時間排在前面
+                const reversedLogs = filteredLogs.reverse();
+                timeSelect.innerHTML = '<option value="">-- 請選擇時間 --</option>';
+                reversedLogs.forEach(item => {
+                    const option = document.createElement('option');
+                    option.value = item.row;
+                    option.textContent = item.timeStr;
+                    timeSelect.appendChild(option);
+                });
+                timeSelect.disabled = false;
+            }
+        }
+
+        // 當選擇時間下拉選框時觸發
+        async function onTimeChange() {
+            const row = document.getElementById('history-time-select').value;
             if (!row) return;
 
             showLoading('history-loading', true);
@@ -282,13 +328,13 @@
                     const historyImg = document.getElementById('history-img');
                     historyImg.src = `data:image/jpeg;base64,${data.message}`;
                     historyImg.style.display = 'block';
-                    document.getElementById('history-time').innerText = `拍攝時間：${new Date(data.time).toLocaleString()}`;
+                    document.getElementById('history-time-display').innerText = `拍攝時間：${new Date(data.time).toLocaleString()}`;
                 } else {
-                    document.getElementById('history-time').innerText = "圖片讀取失敗或資料為空";
+                    document.getElementById('history-time-display').innerText = "圖片讀取失敗或資料為空";
                 }
             } catch (error) {
                 console.error("讀取歷史圖片失敗:", error);
-                document.getElementById('history-time').innerText = "❌ 圖片載入失敗";
+                document.getElementById('history-time-display').innerText = "❌ 圖片載入失敗";
             } finally {
                 showLoading('history-loading', false);
             }
