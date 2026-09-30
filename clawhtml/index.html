@@ -14,22 +14,25 @@
             --border-color: #e0e0e0;
         }
 
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            max-width: 900px;
-            margin: 0 auto;
-            padding: 20px;
-            background: var(--bg-color);
-            color: var(--text-color);
+        * {
+            box-sizing: border-box;
         }
 
-        /* 控制列 */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: var(--bg-color);
+            color: var(--text-color);
+            width: 100%;
+            overflow-x: hidden;
+        }
+
+        /* 1. 鏡頭選擇列 */
         .control-panel {
             background: var(--card-color);
-            padding: 15px 20px;
-            border-radius: 12px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-            margin-bottom: 20px;
+            padding: 12px 20px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -82,17 +85,89 @@
             100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(40, 167, 69, 0); }
         }
 
-        /* 卡片區域 */
+        /* 2. 最新畫面（橫向滿版） */
+        .full-width-card {
+            width: 100%;
+            background: #000;
+            position: relative;
+            margin-bottom: 20px;
+        }
+
+        .latest-image-container {
+            width: 100%;
+            max-height: 80vh;
+            background: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 250px;
+            position: relative;
+        }
+
+        .latest-image-container img {
+            width: 100%;
+            height: auto;
+            max-height: 80vh;
+            object-fit: contain;
+            display: block;
+        }
+
+        /* 懸浮時間標籤 (節省空間) */
+        .overlay-time-display {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.65);
+            color: #ffffff;
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            backdrop-filter: blur(2px);
+            z-index: 5;
+        }
+
+        /* 下方內容容器 (保持適當邊距) */
+        .main-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 15px 20px 15px;
+        }
+
+        /* 3. 歷史記錄區域卡片 */
         .section-card {
             background: var(--card-color);
             padding: 20px;
             border-radius: 12px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-            margin-bottom: 20px;
         }
 
-        /* 最新畫面：自適應尺寸容器 */
-        .image-container {
+        .history-controls {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+            margin-bottom: 15px;
+        }
+
+        .history-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .history-group label {
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .history-group select, .history-group input {
+            width: 100%;
+        }
+
+        .history-image-container {
             width: 100%;
             max-height: 70vh;
             background: #000;
@@ -105,7 +180,7 @@
             position: relative;
         }
 
-        .image-container img {
+        .history-image-container img {
             width: 100%;
             height: auto;
             max-height: 70vh;
@@ -133,6 +208,7 @@
             align-items: center;
             justify-content: center;
             font-size: 0.95rem;
+            z-index: 10;
         }
 
         .spinner {
@@ -149,41 +225,15 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
-
-        /* 歷史記錄選擇器 */
-        .history-controls {
-            display: flex;
-            gap: 15px;
-            align-items: center;
-            flex-wrap: wrap;
-            margin-bottom: 15px;
-        }
-
-        .history-group {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            flex: 1;
-            min-width: 200px;
-        }
-
-        .history-group label {
-            font-weight: 600;
-            white-space: nowrap;
-        }
-
-        .history-group select, .history-group input {
-            width: 100%;
-        }
     </style>
 </head>
 
 <body>
 
-    <!-- 1. 鏡頭選擇與自動更新狀態 -->
+    <!-- 1. 頂部控制列 -->
     <div class="control-panel">
         <div class="control-left">
-            <label for="camera-select">鏡頭：</label>
+            <label for="camera-select">選擇鏡頭：</label>
             <select id="camera-select" onchange="onCameraChange()">
                 <option value="1">鏡頭 1</option>
                 <option value="2">鏡頭 2</option>
@@ -198,44 +248,46 @@
             </select>
         </div>
         <div class="status-badge" id="auto-refresh-status">
-            <span class="dot"></span> 自動監控中
+            <span class="dot"></span> 自動監控中 (每 10 秒更新)
         </div>
     </div>
 
-    <!-- 2. 最新畫面區域 (定時自動刷新 + 記憶體自動釋放) -->
-    <div class="section-card">
-        <div class="image-container" id="latest-container">
+    <!-- 2. 最新畫面區域 (橫向無縫填滿網頁兩側) -->
+    <div class="full-width-card">
+        <div class="latest-image-container" id="latest-container">
             <div class="loading-overlay" id="latest-loading">
                 <div class="spinner"></div>
                 載入中...
             </div>
             <img id="latest-img" src="" alt="最新畫面" style="display: none;" onerror="onImageError(this)">
+            <div class="overlay-time-display" id="latest-time">拍攝時間：--</div>
         </div>
-        <div class="time-display" id="latest-time">拍攝時間：--</div>
     </div>
 
-    <!-- 3. 歷史記錄調閱區域 -->
-    <div class="section-card">
-        <div class="history-controls">
-            <div class="history-group">
-                <label for="history-date">選擇日期：</label>
-                <input type="date" id="history-date" onchange="onDateChange()">
+    <!-- 3. 下方歷史調閱區域 (保持邊距) -->
+    <div class="main-container">
+        <div class="section-card">
+            <div class="history-controls">
+                <div class="history-group">
+                    <label for="history-date">選擇日期：</label>
+                    <input type="date" id="history-date" onchange="onDateChange()">
+                </div>
+                <div class="history-group">
+                    <label for="history-time-select">選擇時間：</label>
+                    <select id="history-time-select" onchange="onTimeChange()" disabled>
+                        <option value="">-- 請先選擇日期 --</option>
+                    </select>
+                </div>
             </div>
-            <div class="history-group">
-                <label for="history-time-select">選擇時間：</label>
-                <select id="history-time-select" onchange="onTimeChange()" disabled>
-                    <option value="">-- 請先選擇日期 --</option>
-                </select>
+            <div class="history-image-container" id="history-container">
+                <div class="loading-overlay" id="history-loading" style="display: none;">
+                    <div class="spinner"></div>
+                    正在讀取歷史畫面...
+                </div>
+                <img id="history-img" src="" alt="歷史畫面" style="display: none;" onerror="onImageError(this)">
             </div>
+            <div class="time-display" id="history-time-display">拍攝時間：--</div>
         </div>
-        <div class="image-container" id="history-container">
-            <div class="loading-overlay" id="history-loading" style="display: none;">
-                <div class="spinner"></div>
-                正在讀取歷史畫面...
-            </div>
-            <img id="history-img" src="" alt="歷史畫面" style="display: none;" onerror="onImageError(this)">
-        </div>
-        <div class="time-display" id="history-time-display">拍攝時間：--</div>
     </div>
 
     <script>
@@ -248,12 +300,10 @@
         let currentCamId = 1;
         let globalHistoryList = []; 
         let refreshTimer = null;
-        let isFetchingLatest = false; // 防止請求重疊
+        let isFetchingLatest = false;
 
-        // 當切換鏡頭時觸發
         function onCameraChange() {
             currentCamId = document.getElementById('camera-select').value;
-            // 重新讀取數據並重置定時器
             initCameraData(currentCamId);
         }
 
@@ -268,16 +318,13 @@
             return dateObj.toTimeString().split(' ')[0];
         }
 
-        // 初始化/切換鏡頭時的完整載入
         async function initCameraData(camId) {
             stopAutoRefresh();
             showLoading('latest-loading', true);
             
-            // 清理並釋放舊畫面記憶體
             clearImageAndMemory('latest-img');
             document.getElementById('latest-time').innerText = "拍攝時間：--";
             
-            // 清空歷史紀錄區域
             document.getElementById('history-date').value = '';
             const timeSelect = document.getElementById('history-time-select');
             timeSelect.innerHTML = '<option value="">-- 請先選擇日期 --</option>';
@@ -290,9 +337,8 @@
             startAutoRefresh();
         }
 
-        // 僅刷新「最新畫面」的核心邏輯（含記憶體釋放）
         async function updateLatestImageOnly(camId, isInitial = false) {
-            if (isFetchingLatest) return; // 若上次請求尚未結束則跳過，防止阻塞
+            if (isFetchingLatest) return;
             isFetchingLatest = true;
 
             try {
@@ -302,10 +348,8 @@
                 if (data.latest && data.latest.message) {
                     const latestImg = document.getElementById('latest-img');
                     
-                    // 關鍵記憶體優化：更新新圖前先手動釋放與清除舊 Base64 數據
                     clearImageAndMemory('latest-img');
 
-                    // 設置新圖
                     latestImg.src = `data:image/jpeg;base64,${data.latest.message}`;
                     latestImg.style.display = 'block';
                     document.getElementById('latest-time').innerText = `拍攝時間：${new Date(data.latest.time).toLocaleString()}`;
@@ -313,7 +357,6 @@
                     document.getElementById('latest-time').innerText = "無最新畫面數據";
                 }
 
-                // 僅在初始化或清空時更新歷史記錄清單，避免定時刷新蓋掉使用者正選擇的歷史列表
                 if (isInitial && data.history && data.history.length > 0) {
                     globalHistoryList = data.history.map(item => {
                         const d = new Date(item.time);
@@ -337,7 +380,6 @@
             }
         }
 
-        // 啟動定時自動刷新
         function startAutoRefresh() {
             stopAutoRefresh();
             refreshTimer = setInterval(() => {
@@ -345,7 +387,6 @@
             }, REFRESH_INTERVAL);
         }
 
-        // 停止定時自動刷新
         function stopAutoRefresh() {
             if (refreshTimer) {
                 clearInterval(refreshTimer);
@@ -353,7 +394,6 @@
             }
         }
 
-        // 核心優化：手動清空並釋放 Image 記憶體緩存
         function clearImageAndMemory(elementId) {
             const img = document.getElementById(elementId);
             if (img) {
@@ -363,7 +403,6 @@
             }
         }
 
-        // 當使用者選擇日曆日期時觸發
         function onDateChange() {
             const selectedDate = document.getElementById('history-date').value;
             const timeSelect = document.getElementById('history-time-select');
@@ -395,7 +434,6 @@
             }
         }
 
-        // 當選擇時間下拉選框時觸發
         async function onTimeChange() {
             const row = document.getElementById('history-time-select').value;
             if (!row) return;
@@ -427,7 +465,6 @@
             document.getElementById(elementId).style.display = isShow ? 'flex' : 'none';
         }
 
-        // 圖片解析錯誤攔截 (防止誤跳彈窗)
         function onImageError(imgElement) {
             if (imgElement.src && imgElement.src.startsWith('data:image')) {
                 imgElement.style.display = 'none';
@@ -435,7 +472,6 @@
             }
         }
 
-        // 監聽分頁可見性：離開分頁時暫停，回到分頁時恢復並立即刷新一次
         document.addEventListener('visibilitychange', () => {
             if (document.hidden) {
                 stopAutoRefresh();
@@ -445,7 +481,6 @@
             }
         });
 
-        // 初始化
         initCameraData(currentCamId);
     </script>
 </body>
