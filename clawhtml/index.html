@@ -190,7 +190,8 @@
                 <option value="3">鏡頭 3</option>
                 <option value="4">鏡頭 4</option>
                 <option value="5">鏡頭 5</option>
-                <option value="6">鏡頭 7</option>
+                <option value="6">鏡頭 6</option>
+                <option value="7">鏡頭 7</option>
                 <option value="8">鏡頭 8</option>
                 <option value="9">鏡頭 9</option>
                 <option value="10">鏡頭 10</option>
@@ -357,7 +358,6 @@
             const img = document.getElementById(elementId);
             if (img) {
                 img.style.display = 'none';
-                // 先將 src 指向空 Blob 或移除，幫助瀏覽器 GC 釋放舊的 Base64 緩存空間
                 img.src = '';
                 img.removeAttribute('src');
             }
