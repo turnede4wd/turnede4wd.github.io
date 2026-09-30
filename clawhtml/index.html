@@ -32,8 +32,15 @@
             margin-bottom: 20px;
             display: flex;
             align-items: center;
-            gap: 10px;
+            justify-content: space-between;
             flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .control-left {
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
 
         .control-panel label {
@@ -50,6 +57,31 @@
             background-color: #fff;
         }
 
+        /* 自動刷新指示點 */
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.85rem;
+            color: #28a745;
+            font-weight: 600;
+        }
+
+        .dot {
+            width: 8px;
+            height: 8px;
+            background-color: #28a745;
+            border-radius: 50%;
+            display: inline-block;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(40, 167, 69, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(40, 167, 69, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(40, 167, 69, 0); }
+        }
+
         /* 卡片區域 */
         .section-card {
             background: var(--card-color);
@@ -62,7 +94,7 @@
         /* 最新畫面：自適應尺寸容器 */
         .image-container {
             width: 100%;
-            max-height: 70vh; /* 防止過高超出螢幕 */
+            max-height: 70vh;
             background: #000;
             border-radius: 8px;
             overflow: hidden;
@@ -77,7 +109,7 @@
             width: 100%;
             height: auto;
             max-height: 70vh;
-            object-fit: contain; /* 自適應等比例縮放 */
+            object-fit: contain;
             display: block;
         }
 
@@ -148,24 +180,28 @@
 
 <body>
 
-    <!-- 1. 鏡頭選擇列 -->
+    <!-- 1. 鏡頭選擇與自動更新狀態 -->
     <div class="control-panel">
-        <label for="camera-select">選擇鏡頭：</label>
-        <select id="camera-select" onchange="onCameraChange()">
-            <option value="1">鏡頭 1</option>
-            <option value="2">鏡頭 2</option>
-            <option value="3">鏡頭 3</option>
-            <option value="4">鏡頭 4</option>
-            <option value="5">鏡頭 5</option>
-            <option value="6">鏡頭 6</option>
-            <option value="7">鏡頭 7</option>
-            <option value="8">鏡頭 8</option>
-            <option value="9">鏡頭 9</option>
-            <option value="10">鏡頭 10</option>
-        </select>
+        <div class="control-left">
+            <label for="camera-select">選擇鏡頭：</label>
+            <select id="camera-select" onchange="onCameraChange()">
+                <option value="1">鏡頭 1</option>
+                <option value="2">鏡頭 2</option>
+                <option value="3">鏡頭 3</option>
+                <option value="4">鏡頭 4</option>
+                <option value="5">鏡頭 5</option>
+                <option value="6">鏡頭 7</option>
+                <option value="8">鏡頭 8</option>
+                <option value="9">鏡頭 9</option>
+                <option value="10">鏡頭 10</option>
+            </select>
+        </div>
+        <div class="status-badge" id="auto-refresh-status">
+            <span class="dot"></span> 自動監控中 (每 10 秒更新)
+        </div>
     </div>
 
-    <!-- 2. 最新畫面區域 (自適應) -->
+    <!-- 2. 最新畫面區域 (定時自動刷新 + 記憶體自動釋放) -->
     <div class="section-card">
         <div class="image-container" id="latest-container">
             <div class="loading-overlay" id="latest-loading">
@@ -177,7 +213,7 @@
         <div class="time-display" id="latest-time">拍攝時間：--</div>
     </div>
 
-    <!-- 3. 歷史記錄調閱區域（日曆 + 時間選框） -->
+    <!-- 3. 歷史記錄調閱區域 -->
     <div class="section-card">
         <div class="history-controls">
             <div class="history-group">
@@ -205,16 +241,21 @@
         // ⚠️ 請替換為您部署的 Apps Script Web App URL
         const apiUrl = "https://script.google.com/macros/s/AKfycbz-QCYUOWpqk4pQ16s5WCvb10t6UNDBqxa4kgpCiRtmlzazmx1kMtXPq0_N_hfxk48/exec";
 
+        // 自動更新間隔時間（毫秒）: 10000 = 10秒
+        const REFRESH_INTERVAL = 10000;
+
         let currentCamId = 1;
-        let globalHistoryList = []; // 儲存當前鏡頭的所有歷史時間點記錄
+        let globalHistoryList = []; 
+        let refreshTimer = null;
+        let isFetchingLatest = false; // 防止請求重疊
 
         // 當切換鏡頭時觸發
         function onCameraChange() {
             currentCamId = document.getElementById('camera-select').value;
-            fetchCameraData(currentCamId);
+            // 重新讀取數據並重置定時器
+            initCameraData(currentCamId);
         }
 
-        // 格式化日期為 YYYY-MM-DD
         function formatDateKey(dateObj) {
             const y = dateObj.getFullYear();
             const m = String(dateObj.getMonth() + 1).padStart(2, '0');
@@ -222,16 +263,17 @@
             return `${y}-${m}-${d}`;
         }
 
-        // 格式化時間為 HH:MM:SS
         function formatTimeString(dateObj) {
             return dateObj.toTimeString().split(' ')[0];
         }
 
-        // 讀取該鏡頭數據（最新影像 Base64 + 歷史時間表）
-        async function fetchCameraData(camId) {
-            // 重設 UI 狀態
+        // 初始化/切換鏡頭時的完整載入
+        async function initCameraData(camId) {
+            stopAutoRefresh();
             showLoading('latest-loading', true);
-            hideImage('latest-img');
+            
+            // 清理並釋放舊畫面記憶體
+            clearImageAndMemory('latest-img');
             document.getElementById('latest-time').innerText = "拍攝時間：--";
             
             // 清空歷史紀錄區域
@@ -239,26 +281,39 @@
             const timeSelect = document.getElementById('history-time-select');
             timeSelect.innerHTML = '<option value="">-- 請先選擇日期 --</option>';
             timeSelect.disabled = true;
-            hideImage('history-img');
+            clearImageAndMemory('history-img');
             document.getElementById('history-time-display').innerText = "拍攝時間：--";
             globalHistoryList = [];
+
+            await updateLatestImageOnly(camId, true);
+            startAutoRefresh();
+        }
+
+        // 僅刷新「最新畫面」的核心邏輯（含記憶體釋放）
+        async function updateLatestImageOnly(camId, isInitial = false) {
+            if (isFetchingLatest) return; // 若上次請求尚未結束則跳過，防止阻塞
+            isFetchingLatest = true;
 
             try {
                 const response = await fetch(`${apiUrl}?action=getLogs&camId=${camId}`);
                 const data = await response.json();
 
-                // 1. 渲染最新影像
                 if (data.latest && data.latest.message) {
                     const latestImg = document.getElementById('latest-img');
+                    
+                    // 關鍵記憶體優化：更新新圖前先手動釋放與清除舊 Base64 數據
+                    clearImageAndMemory('latest-img');
+
+                    // 設置新圖
                     latestImg.src = `data:image/jpeg;base64,${data.latest.message}`;
                     latestImg.style.display = 'block';
                     document.getElementById('latest-time').innerText = `拍攝時間：${new Date(data.latest.time).toLocaleString()}`;
-                } else {
+                } else if (isInitial) {
                     document.getElementById('latest-time').innerText = "無最新畫面數據";
                 }
 
-                // 2. 解析歷史紀錄列表
-                if (data.history && data.history.length > 0) {
+                // 僅在初始化或清空時更新歷史記錄清單，避免定時刷新蓋掉使用者正選擇的歷史列表
+                if (isInitial && data.history && data.history.length > 0) {
                     globalHistoryList = data.history.map(item => {
                         const d = new Date(item.time);
                         return {
@@ -271,10 +326,40 @@
                 }
 
             } catch (error) {
-                console.error("獲取資料失敗:", error);
-                document.getElementById('latest-time').innerText = "❌ 資料載入失敗";
+                console.error("更新最新畫面失敗:", error);
+                if (isInitial) {
+                    document.getElementById('latest-time').innerText = "❌ 資料載入失敗";
+                }
             } finally {
-                showLoading('latest-loading', false);
+                isFetchingLatest = false;
+                if (isInitial) showLoading('latest-loading', false);
+            }
+        }
+
+        // 啟動定時自動刷新
+        function startAutoRefresh() {
+            stopAutoRefresh();
+            refreshTimer = setInterval(() => {
+                updateLatestImageOnly(currentCamId, false);
+            }, REFRESH_INTERVAL);
+        }
+
+        // 停止定時自動刷新
+        function stopAutoRefresh() {
+            if (refreshTimer) {
+                clearInterval(refreshTimer);
+                refreshTimer = null;
+            }
+        }
+
+        // 核心優化：手動清空並釋放 Image 記憶體緩存
+        function clearImageAndMemory(elementId) {
+            const img = document.getElementById(elementId);
+            if (img) {
+                img.style.display = 'none';
+                // 先將 src 指向空 Blob 或移除，幫助瀏覽器 GC 釋放舊的 Base64 緩存空間
+                img.src = '';
+                img.removeAttribute('src');
             }
         }
 
@@ -283,7 +368,7 @@
             const selectedDate = document.getElementById('history-date').value;
             const timeSelect = document.getElementById('history-time-select');
 
-            hideImage('history-img');
+            clearImageAndMemory('history-img');
             document.getElementById('history-time-display').innerText = "拍攝時間：--";
 
             if (!selectedDate) {
@@ -292,14 +377,12 @@
                 return;
             }
 
-            // 篩選出符合該日期的時間記錄
             const filteredLogs = globalHistoryList.filter(item => item.dateStr === selectedDate);
 
             if (filteredLogs.length === 0) {
                 timeSelect.innerHTML = '<option value="">-- 該日期無記錄 --</option>';
                 timeSelect.disabled = true;
             } else {
-                // 反轉陣列，讓最新拍攝的時間排在前面
                 const reversedLogs = filteredLogs.reverse();
                 timeSelect.innerHTML = '<option value="">-- 請選擇時間 --</option>';
                 reversedLogs.forEach(item => {
@@ -318,7 +401,7 @@
             if (!row) return;
 
             showLoading('history-loading', true);
-            hideImage('history-img');
+            clearImageAndMemory('history-img');
 
             try {
                 const response = await fetch(`${apiUrl}?action=getImage&camId=${currentCamId}&row=${row}`);
@@ -344,19 +427,26 @@
             document.getElementById(elementId).style.display = isShow ? 'flex' : 'none';
         }
 
-        function hideImage(elementId) {
-            const img = document.getElementById(elementId);
-            img.style.display = 'none';
-            img.src = '';
-        }
-
+        // 圖片解析錯誤攔截 (防止誤跳彈窗)
         function onImageError(imgElement) {
-            imgElement.style.display = 'none';
-            alert('圖片解析失敗，請確認上傳的數據是否為正確的 Base64 格式。');
+            if (imgElement.src && imgElement.src.startsWith('data:image')) {
+                imgElement.style.display = 'none';
+                alert('圖片解析失敗，請確認上傳的數據是否為正確的 Base64 格式。');
+            }
         }
 
-        // 初始化：預設讀取鏡頭 1
-        fetchCameraData(currentCamId);
+        // 監聽分頁可見性：離開分頁時暫停，回到分頁時恢復並立即刷新一次
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                stopAutoRefresh();
+            } else {
+                updateLatestImageOnly(currentCamId, false);
+                startAutoRefresh();
+            }
+        });
+
+        // 初始化
+        initCameraData(currentCamId);
     </script>
 </body>
 
