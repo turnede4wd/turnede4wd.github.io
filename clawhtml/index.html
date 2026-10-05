@@ -291,7 +291,7 @@
     </div>
 
     <script>
-        const apiUrl = "https://script.google.com/macros/s/AKfycby0LPf9jhgiRG52TXioWo252KG_2XR0UZKq8HD_i1M-N9plqwTKkBCWU5yEsj3ys6Cx/exec";
+        const apiUrl = "https://script.google.com/macros/s/AKfycbyhxo_2CYwpIX4vHIb6bYevYDbTNtmoSC9JzBAjxqKi1lhSg-n3ZgTVGrQUO_Btky3l/exec";
         const REFRESH_INTERVAL = 10000;
 
         let currentCamId = 1;
@@ -344,10 +344,10 @@
 
                 if (data.latest && data.latest.message) {
                     const latestImg = document.getElementById('latest-img');
-                    
                     clearImageAndMemory('latest-img');
 
-                    latestImg.src = `data:image/jpeg;base64,${data.latest.message}`;
+                    // 直接使用网络图片链接，不要加 data:image/jpeg;base64 前缀
+                    latestImg.src = data.latest.message;
                     latestImg.style.display = 'block';
                     document.getElementById('latest-time').innerText = `拍攝時間：${new Date(data.latest.time).toLocaleString()}`;
                 } else if (isInitial) {
@@ -444,7 +444,9 @@
 
                 if (data.message) {
                     const historyImg = document.getElementById('history-img');
-                    historyImg.src = `data:image/jpeg;base64,${data.message}`;
+    
+                    // 直接使用网络图片链接
+                    historyImg.src = data.message;
                     historyImg.style.display = 'block';
                     document.getElementById('history-time-display').innerText = `拍攝時間：${new Date(data.time).toLocaleString()}`;
                 } else {
