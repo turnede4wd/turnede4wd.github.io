@@ -112,7 +112,7 @@
             display: block;
         }
 
-        /* 懸浮時間標籤 (節省空間) */
+        /* 懸浮時間標籤 */
         .overlay-time-display {
             position: absolute;
             bottom: 10px;
@@ -127,7 +127,7 @@
             z-index: 5;
         }
 
-        /* 下方內容容器 (保持適當邊距) */
+        /* 下方內容容器 */
         .main-container {
             max-width: 1200px;
             margin: 0 auto;
@@ -252,7 +252,7 @@
         </div>
     </div>
 
-    <!-- 2. 最新畫面區域 (橫向無縫填滿網頁兩側) -->
+    <!-- 2. 最新畫面區域 -->
     <div class="full-width-card">
         <div class="latest-image-container" id="latest-container">
             <div class="loading-overlay" id="latest-loading">
@@ -264,7 +264,7 @@
         </div>
     </div>
 
-    <!-- 3. 下方歷史調閱區域 (保持邊距) -->
+    <!-- 3. 下方歷史調閱區域 -->
     <div class="main-container">
         <div class="section-card">
             <div class="history-controls">
@@ -291,10 +291,7 @@
     </div>
 
     <script>
-        // ⚠️ 請替換為您部署的 Apps Script Web App URL
-        const apiUrl = "https://script.google.com/macros/s/AKfycbzL4kx01rxGs_A2hgfm6JbCNfcCZa7lTB9AYhfEIQemnzGvNIWcjTN3EE55QupD1UFk/exec";
-
-        // 自動更新間隔時間（毫秒）: 10000 = 10秒
+        const apiUrl = "https://script.google.com/macros/s/AKfycby0LPf9jhgiRG52TXioWo252KG_2XR0UZKq8HD_i1M-N9plqwTKkBCWU5yEsj3ys6Cx/exec";
         const REFRESH_INTERVAL = 10000;
 
         let currentCamId = 1;
@@ -422,7 +419,7 @@
                 timeSelect.innerHTML = '<option value="">-- 該日期無記錄 --</option>';
                 timeSelect.disabled = true;
             } else {
-                const reversedLogs = filteredLogs.reverse();
+                const reversedLogs = filteredLogs.slice().reverse();
                 timeSelect.innerHTML = '<option value="">-- 請選擇時間 --</option>';
                 reversedLogs.forEach(item => {
                     const option = document.createElement('option');
