@@ -299,8 +299,48 @@
         let refreshTimer = null;
         let isFetchingLatest = false;
 
+        // 【新增】：解析 URL 取得預設鏡頭號碼（支援 /cam01, /cam1, #cam01, ?cam=1）
+        function parseCamIdFromUrl() {
+            const pathname = window.location.pathname; // 如 "/cam01"
+            const hash = window.location.hash;         // 如 "#cam01"
+            const searchParams = new URLSearchParams(window.location.search); // 如 "?cam=1"
+
+            let foundId = null;
+
+            // 1. 檢查 URL 查詢參數 ?cam=1
+            if (searchParams.has('cam')) {
+                foundId = parseInt(searchParams.get('cam'), 10);
+            }
+
+            // 2. 檢查 Hash 例如 #cam01 或 #1
+            if (!foundId && hash) {
+                const match = hash.match(/(?:cam)?0*([1-9]|10)/i);
+                if (match) foundId = parseInt(match[1], 10);
+            }
+
+            // 3. 檢查 Path 例如 /cam01 或 /cam1 或 /1
+            if (!foundId && pathname) {
+                const match = pathname.match(/\/(?:cam)?0*([1-9]|10)\/?$/i);
+                if (match) foundId = parseInt(match[1], 10);
+            }
+
+            // 校驗鏡頭 ID 是否在 1 ~ 10 的有效範圍內
+            if (foundId && foundId >= 1 && foundId <= 10) {
+                return foundId;
+            }
+            
+            return 1; // 預設為鏡頭 1
+        }
+
+        // 【新增】：修改 URL Hash（使使用者切換下拉選單時，網址跟著改變，方便分享）
+        function updateUrlHash(camId) {
+            const formattedCam = String(camId).padStart(2, '0');
+            window.history.replaceState(null, '', `#cam${formattedCam}`);
+        }
+
         function onCameraChange() {
             currentCamId = document.getElementById('camera-select').value;
+            updateUrlHash(currentCamId);
             initCameraData(currentCamId);
         }
 
@@ -346,7 +386,6 @@
                     const latestImg = document.getElementById('latest-img');
                     clearImageAndMemory('latest-img');
 
-                    // 直接使用网络图片链接，不要加 data:image/jpeg;base64 前缀
                     latestImg.src = data.latest.message;
                     latestImg.style.display = 'block';
                     document.getElementById('latest-time').innerText = `拍攝時間：${new Date(data.latest.time).toLocaleString()}`;
@@ -444,8 +483,6 @@
 
                 if (data.message) {
                     const historyImg = document.getElementById('history-img');
-    
-                    // 直接使用网络图片链接
                     historyImg.src = data.message;
                     historyImg.style.display = 'block';
                     document.getElementById('history-time-display').innerText = `拍攝時間：${new Date(data.time).toLocaleString()}`;
@@ -480,7 +517,12 @@
             }
         });
 
-        initCameraData(currentCamId);
+        // 頁面初始化：取得 URL 鏡頭號碼並更新選單
+        window.addEventListener('DOMContentLoaded', () => {
+            currentCamId = parseCamIdFromUrl();
+            document.getElementById('camera-select').value = currentCamId;
+            initCameraData(currentCamId);
+        });
     </script>
 </body>
 
