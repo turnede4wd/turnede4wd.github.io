@@ -32,8 +32,17 @@
       font-size: 1.8rem;
     }
 
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
     .section-title {
-      margin: 0 0 16px 0;
+      margin: 0;
       font-size: 1.2rem;
       color: var(--primary-color);
       display: flex;
@@ -138,20 +147,20 @@
       border-bottom: 1px solid #eee;
     }
 
-    .filter-bar label {
+    .filter-bar label, .chart-control label {
       font-size: 0.9rem;
       font-weight: 500;
     }
 
-    .filter-bar input, .filter-bar select {
-      padding: 8px 12px;
+    .filter-bar input, .filter-bar select, .chart-control select {
+      padding: 6px 12px;
       border: 1px solid #ccc;
       border-radius: 6px;
       font-size: 0.9rem;
       outline: none;
     }
 
-    .filter-bar input:focus, .filter-bar select:focus {
+    .filter-bar input:focus, .filter-bar select:focus, .chart-control select:focus {
       border-color: #3498db;
     }
 
@@ -202,10 +211,10 @@
   <div class="container">
     <h1>鳥巢監測 dashboard</h1>
 
-    <!-- 1. 最顶部：最新拍摄照片 (自适应固定比例 + 黑边) -->
+    <!-- 1. 最顶部：最新拍摄照片 -->
     <div class="hero-photo-container">
       <h3 class="section-title">最新抓拍</h3>
-      <div class="aspect-ratio-box">
+      <div class="aspect-ratio-box" style="margin-top: 12px;">
         <img id="latestPhoto" src="" alt="等待接收最新抓拍圖像..." style="display: none;">
         <span id="latestPhotoPlaceholder" style="color: #aaa;">加載最新圖像中...</span>
         <div class="hero-photo-info" id="latestPhotoMeta" style="display: none;">
@@ -231,9 +240,18 @@
       </div>
     </div>
 
-    <!-- 3. 历史数据趋势 -->
+    <!-- 3. 历史数据趋势图表 (新增数据范围控制) -->
     <div class="chart-container">
-      <h3 class="section-title">歷史數據趨勢</h3>
+      <div class="section-header">
+        <h3 class="section-title">歷史數據趨勢</h3>
+        <div class="chart-control">
+          <label for="chartRangeSelect">顯示範圍：</label>
+          <select id="chartRangeSelect">
+            <option value="50" selected>最近 50 條數據</option>
+            <option value="all">全部歷史數據</option>
+          </select>
+        </div>
+      </div>
       <canvas id="envChart" height="100"></canvas>
     </div>
 
@@ -241,7 +259,7 @@
     <div class="gallery-container">
       <h3 class="section-title">歷史照片查詢</h3>
       
-      <div class="filter-bar">
+      <div class="filter-bar" style="margin-top: 12px;">
         <div>
           <label for="datePicker">選擇日期：</label>
           <input type="date" id="datePicker">
@@ -249,7 +267,7 @@
         <div>
           <label for="timeFilter">具體時間：</label>
           <select id="timeFilter">
-            <option value="all">全天照片</option>
+            <option value="all">全天照片 (最近50張)</option>
           </select>
         </div>
       </div>
@@ -261,10 +279,10 @@
   </div>
 
   <script>
-    // ⚠️ 请填入部署好的 Google Apps Script Web App 地址
     const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyL-Fxl_M5zIiBqsNFGSXtkcFwuoqGM8jyBN-88k_CdDXadqAtPv2TfjbiDt39CGzyC/exec";
 
     let chartInstance = null;
+    let cachedAllRows = [];   // 缓存从 Google Sheets 拿到的所有数据
     let cachedPhotoRows = []; // 缓存所有包含图片的数据
 
     // 日期格式化辅助函数 (YYYY-MM-DD)
@@ -281,10 +299,10 @@
         const result = await response.json();
 
         if (result.status === "success" && result.data.length > 0) {
-          const rows = result.data;
+          cachedAllRows = result.data;
           
           // 过滤出含有有效照片链接的记录
-          cachedPhotoRows = rows.filter(r => r.imageUrl && r.imageUrl.trim() !== "");
+          cachedPhotoRows = cachedAllRows.filter(r => r.imageUrl && r.imageUrl.trim() !== "");
 
           // 1. 更新顶部最新照片与元数据
           const latestPhotoRow = [...cachedPhotoRows].pop();
@@ -303,13 +321,13 @@
           }
 
           // 2. 更新传感器当前最新数值
-          const latestData = rows[rows.length - 1];
+          const latestData = cachedAllRows[cachedAllRows.length - 1];
           document.getElementById('tempVal').innerText = `${latestData.temp !== "" ? latestData.temp : '--'} °C`;
           document.getElementById('humVal').innerText = `${latestData.hum !== "" ? latestData.hum : '--'} %`;
           document.getElementById('luxVal').innerText = `${latestData.lux !== "" ? latestData.lux : '--'} lx`;
 
-          // 3. 更新 Chart.js 趋势图表
-          renderChart(rows);
+          // 3. 渲染趋势图表
+          renderChart();
 
           // 4. 初始化/更新日期选择器与照片列表
           initDatePickerAndGallery();
@@ -319,11 +337,21 @@
       }
     }
 
-    function renderChart(rows) {
-      const labels = rows.map(r => new Date(r.timestamp).toLocaleTimeString());
-      const temps = rows.map(r => r.temp);
-      const hums = rows.map(r => r.hum);
-      const luxs = rows.map(r => r.lux);
+    function renderChart() {
+      if (!cachedAllRows || cachedAllRows.length === 0) return;
+
+      const rangeValue = document.getElementById('chartRangeSelect').value;
+      
+      // 根据选择的范围，裁剪要展示的数据（默认截取最后 50 条）
+      let displayRows = cachedAllRows;
+      if (rangeValue === '50') {
+        displayRows = cachedAllRows.slice(-50);
+      }
+
+      const labels = displayRows.map(r => new Date(r.timestamp).toLocaleTimeString());
+      const temps = displayRows.map(r => r.temp);
+      const hums = displayRows.map(r => r.hum);
+      const luxs = displayRows.map(r => r.lux);
 
       if (chartInstance) {
         chartInstance.destroy();
@@ -354,7 +382,7 @@
     function initDatePickerAndGallery() {
       const datePicker = document.getElementById('datePicker');
       
-      // 如果日期输入框未选择，默认设置为最新照片的日期或今天
+      // 默认选中最新照片的日期
       if (!datePicker.value) {
         const defaultDate = cachedPhotoRows.length > 0 
           ? new Date(cachedPhotoRows[cachedPhotoRows.length - 1].timestamp)
@@ -368,7 +396,6 @@
     function updateGalleryByDate() {
       const datePicker = document.getElementById('datePicker');
       const timeFilter = document.getElementById('timeFilter');
-      const photoGrid = document.getElementById('photoGrid');
 
       const selectedDateStr = datePicker.value;
       if (!selectedDateStr) return;
@@ -380,7 +407,7 @@
       });
 
       // 更新具体时间下拉框选项
-      timeFilter.innerHTML = '<option value="all">全天照片</option>';
+      timeFilter.innerHTML = '<option value="all">全天照片 (最近50張)</option>';
       filteredByDate.forEach((r, idx) => {
         const timeStr = new Date(r.timestamp).toLocaleTimeString();
         const opt = document.createElement('option');
@@ -398,7 +425,12 @@
       photoGrid.innerHTML = '';
 
       let displayPhotos = photos;
-      if (timeFilter.value !== 'all') {
+      
+      if (timeFilter.value === 'all') {
+        // 如果选择“全天照片”，仅显示最新的 50 张
+        displayPhotos = photos.slice(-50);
+      } else {
+        // 如果选择了特定时间点，只展示选中的那 1 张
         const targetIdx = parseInt(timeFilter.value, 10);
         if (!isNaN(targetIdx) && photos[targetIdx]) {
           displayPhotos = [photos[targetIdx]];
@@ -410,7 +442,7 @@
         return;
       }
 
-      // 倒序展示（最新的在前）
+      // 倒序展示（最新时间在最前面）
       displayPhotos.slice().reverse().forEach(row => {
         const item = document.createElement('div');
         item.className = 'photo-item';
@@ -425,6 +457,7 @@
     }
 
     // 事件绑定
+    document.getElementById('chartRangeSelect').addEventListener('change', renderChart);
     document.getElementById('datePicker').addEventListener('change', updateGalleryByDate);
     document.getElementById('timeFilter').addEventListener('change', () => {
       const selectedDateStr = document.getElementById('datePicker').value;
