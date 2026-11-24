@@ -1,0 +1,16 @@
+{
+  "name": "ESP32 ADC Monitor",
+  "version": "1.0.0",
+  "new_install_prompt_erase": true,
+  "builds": [
+    {
+      "chipFamily": "ESP32",
+      "parts": [
+        {
+          "path": "./merged-binary.bin",
+          "offset": 0
+        }
+      ]
+    }
+  ]
+}
