@@ -1,490 +1,690 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
+
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ESP32 AIoT Portal & Web Flasher</title>
-  <script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
-  <style>
-    :root {
-      --bg: #f6f8fb;
-      --surface: #ffffff;
-      --text: #162032;
-      --muted: #5b687d;
-      --primary: #0f62fe;
-      --primary-hover: #0353e9;
-      --border: #dce3ee;
-      --accent-bg: #eef4ff;
-      --code-bg: #101622;
-      --code-text: #e6edf3;
-    }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ADC電壓實時監控</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
 
-    * {
-      box-sizing: border-box;
-    }
+        body {
+            background: linear-gradient(135deg, #1a2a6c, #2c3e50);
+            color: #fff;
+            min-height: 100vh;
+            padding: 20px;
+        }
 
-    body {
-      margin: 0;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans TC", "PingFang TC", sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      line-height: 1.6;
-    }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
 
-    header {
-      position: sticky;
-      top: 0;
-      z-index: 20;
-      background: rgba(255, 255, 255, 0.92);
-      backdrop-filter: blur(10px);
-      border-bottom: 1px solid var(--border);
-    }
+        header {
+            text-align: center;
+            padding: 20px 0;
+            margin-bottom: 30px;
+        }
 
-    .topbar {
-      max-width: 1040px;
-      margin: 0 auto;
-      padding: 14px 20px;
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-    }
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            background: linear-gradient(to right, #4facfe, #00f2fe);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
 
-    .brand {
-      font-weight: 700;
-      font-size: 1.1rem;
-      letter-spacing: 0.2px;
-    }
+        .subtitle {
+            font-size: 1.2rem;
+            opacity: 0.8;
+        }
 
-    .actions {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
 
-    button {
-      cursor: pointer;
-      border: 1px solid var(--border);
-      background: var(--surface);
-      color: var(--text);
-      padding: 8px 14px;
-      border-radius: 8px;
-      font-size: 0.92rem;
-      font-weight: 600;
-      transition: all 0.15s ease;
-    }
+        button,
+        .btn-link {
+            background: linear-gradient(45deg, #3498db, #2980b9);
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            font-size: 1rem;
+            border-radius: 30px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+            font-weight: 600;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
 
-    button:hover {
-      background: #f0f4fa;
-    }
+        button:hover,
+        .btn-link:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.3);
+        }
 
-    button.primary {
-      background: var(--primary);
-      border-color: var(--primary);
-      color: #ffffff;
-    }
+        button:active,
+        .btn-link:active {
+            transform: translateY(1px);
+        }
 
-    button.primary:hover {
-      background: var(--primary-hover);
-    }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
 
-    .esp-drawer {
-      max-width: 1040px;
-      margin: 0 auto;
-      padding: 0 20px 18px;
-      display: none;
-    }
+        #disconnectBtn {
+            background: linear-gradient(45deg, #e74c3c, #c0392b);
+        }
 
-    .esp-drawer.open {
-      display: block;
-    }
+        #toggleConsoleBtn {
+            background: linear-gradient(45deg, #9b59b6, #8e44ad);
+        }
 
-    .drawer-card {
-      background: var(--accent-bg);
-      border: 1px solid #c6dafc;
-      border-radius: 12px;
-      padding: 18px;
-    }
+        #clearConsoleBtn {
+            background: linear-gradient(45deg, #2ecc71, #27ae60);
+        }
 
-    .drawer-header {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      margin-bottom: 12px;
-    }
+        #toggleFlashDrawerBtn {
+            background: linear-gradient(45deg, #f39c12, #d35400);
+        }
 
-    .drawer-header h2 {
-      margin: 0;
-      font-size: 1.05rem;
-    }
+        /* 精簡型 ESP32 燒錄展開欄 */
+        .flash-drawer {
+            display: none;
+            max-width: 680px;
+            margin: 0 auto 24px;
+            background: rgba(255, 255, 255, 0.12);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 12px;
+            padding: 14px 18px;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+        }
 
-    .flash-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-      gap: 14px;
-      margin-top: 12px;
-    }
+        .flash-drawer.open {
+            display: block;
+        }
 
-    .panel-box {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 14px;
-    }
+        .flash-drawer-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
 
-    .panel-box h3 {
-      margin: 0 0 8px;
-      font-size: 0.95rem;
-    }
+        .flash-drawer-title {
+            font-size: 0.98rem;
+            font-weight: 600;
+            color: #ffd166;
+        }
 
-    .panel-box p {
-      margin: 0 0 10px;
-      font-size: 0.88rem;
-      color: var(--muted);
-    }
+        .flash-drawer-meta {
+            font-size: 0.85rem;
+            opacity: 0.85;
+            margin-top: 6px;
+        }
 
-    input[type="file"] {
-      width: 100%;
-      font-size: 0.85rem;
-      margin-bottom: 8px;
-    }
+        .flash-drawer-meta code {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 2px 6px;
+            border-radius: 4px;
+            color: #00f2fe;
+        }
 
-    .status-line {
-      margin-top: 10px;
-      font-size: 0.86rem;
-      color: var(--text);
-      font-weight: 500;
-    }
+        .flash-drawer-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
 
-    main {
-      max-width: 1040px;
-      margin: 28px auto 60px;
-      padding: 0 20px;
-    }
+        .flash-drawer-actions button,
+        .flash-drawer-actions .btn-link {
+            padding: 8px 16px;
+            font-size: 0.9rem;
+        }
 
-    .hero {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 28px;
-      margin-bottom: 24px;
-    }
+        .btn-link {
+            background: rgba(255, 255, 255, 0.16);
+            border: 1px solid rgba(255, 255, 255, 0.25);
+        }
 
-    .hero h1 {
-      margin: 0 0 10px;
-      font-size: 1.75rem;
-    }
+        .status {
+            text-align: center;
+            margin: 20px 0;
+            font-size: 1.2rem;
+        }
 
-    .hero p {
-      margin: 0;
-      color: var(--muted);
-      max-width: 72ch;
-    }
+        #statusText {
+            display: inline-block;
+            padding: 8px 20px;
+            border-radius: 20px;
+            background-color: rgba(0, 0, 0, 0.2);
+        }
 
-    .cards {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 18px;
-      margin-bottom: 24px;
-    }
+        .connected {
+            color: #2ecc71;
+        }
 
-    .card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 20px;
-    }
+        .disconnected {
+            color: #e74c3c;
+        }
 
-    .card h2 {
-      margin: 0 0 8px;
-      font-size: 1.1rem;
-    }
+        .chart-container {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 30px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            height: 500px;
+        }
 
-    .card p {
-      margin: 0;
-      color: var(--muted);
-      font-size: 0.93rem;
-    }
+        .console-container {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            overflow: hidden;
+            margin-top: 20px;
+            max-height: 300px;
+            transition: max-height 0.5s ease;
+        }
 
-    .guide {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 24px;
-    }
+        .console-container.collapsed {
+            max-height: 40px;
+        }
 
-    .guide h2 {
-      margin: 0 0 12px;
-      font-size: 1.2rem;
-    }
+        .console-header {
+            background: rgba(0, 0, 0, 0.4);
+            padding: 12px 20px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
 
-    .guide ol {
-      margin: 0 0 16px;
-      padding-left: 20px;
-      color: var(--muted);
-    }
+        .console-content {
+            padding: 15px;
+            height: 250px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            background: rgba(0, 0, 0, 0.2);
+            color: #00ff9d;
+        }
 
-    .guide li {
-      margin-bottom: 6px;
-    }
+        .console-line {
+            margin-bottom: 5px;
+            padding: 3px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
 
-    pre {
-      margin: 0;
-      padding: 14px 16px;
-      border-radius: 10px;
-      background: var(--code-bg);
-      color: var(--code-text);
-      overflow-x: auto;
-      font-size: 0.86rem;
-      line-height: 1.5;
-    }
+        .data-point {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 20px;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
 
-    .note {
-      margin-top: 12px;
-      font-size: 0.86rem;
-      color: var(--muted);
-    }
-  </style>
+        .data-card {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 20px;
+            width: 220px;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        .data-title {
+            font-size: 1.1rem;
+            margin-bottom: 10px;
+            color: #3498db;
+        }
+
+        .data-value {
+            font-size: 2.2rem;
+            font-weight: bold;
+        }
+
+        .adc0-value {
+            color: #4facfe;
+        }
+
+        .adc1-value {
+            color: #00f2fe;
+        }
+
+        .timestamp {
+            font-size: 0.9rem;
+            opacity: 0.7;
+            margin-top: 10px;
+        }
+
+        @media (max-width: 768px) {
+            .chart-container {
+                height: 350px;
+            }
+
+            h1 {
+                font-size: 2rem;
+            }
+        }
+    </style>
 </head>
+
 <body>
-  <header>
-    <div class="topbar">
-      <div class="brand" id="brandTitle">ESP32 Hardware & Firmware Hub</div>
-      <div class="actions">
-        <button id="toggleEspBtn" class="primary" type="button" aria-expanded="false" aria-controls="espDrawer">
-          ESP32 配置 / 燒錄固件
-        </button>
-        <button id="langBtn" type="button">English</button>
-      </div>
-    </div>
+    <div class="container">
+        <header>
+            <h1>ADC電壓實時監控系統</h1>
+            <p class="subtitle">通過BLE連接ESP32，實時獲取並顯示ADC讀數</p>
+        </header>
 
-    <div id="espDrawer" class="esp-drawer">
-      <div class="drawer-card">
-        <div class="drawer-header">
-          <h2 id="drawerTitle">ESP32 配置與固件燒錄（merged-binary.bin）</h2>
-          <span id="browserHint" style="font-size: 0.84rem; color: var(--muted);">
-            請使用 Chrome 或 Edge 透過 USB 連接裝置（HTTPS 環境）
-          </span>
+        <div class="controls">
+            <button id="connectBtn">連接設備</button>
+            <button id="disconnectBtn">斷開連接</button>
+            <button id="toggleConsoleBtn">顯示控制台</button>
+            <button id="clearConsoleBtn">清空控制台</button>
+            <button id="toggleFlashDrawerBtn" aria-expanded="false" aria-controls="flashDrawer">ESP32 燒錄</button>
         </div>
 
-        <div class="flash-grid">
-          <div class="panel-box">
-            <h3 id="webFlashTitle">一鍵網頁燒錄（Manifest 模式）</h3>
-            <p id="webFlashDesc">
-              透過 GitHub Pages 託管的 manifest.json 自動載入 merged-binary.bin 並燒錄至 ESP32。
+        <div id="flashDrawer" class="flash-drawer">
+            <div class="flash-drawer-top">
+                <span class="flash-drawer-title">ESP32 固件燒錄</span>
+                <div class="flash-drawer-actions">
+                    <esp-web-install-button manifest="./manifest.json">
+                        <button slot="activate" type="button">燒錄同級固件</button>
+                    </esp-web-install-button>
+                    <a class="btn-link" href="./merged-binary.bin" download="merged-binary.bin">下載 BIN</a>
+                </div>
+            </div>
+            <p class="flash-drawer-meta">
+                使用同級目錄檔案：<code>./merged-binary.bin</code>（需搭配同級 <code>./manifest.json</code> 與 HTTPS 連線）
             </p>
-            <esp-web-install-button id="manifestInstaller" manifest="./manifest.json">
-              <button slot="activate" class="primary" type="button" id="connectFlashBtn">
-                連接並燒錄固件
-              </button>
-            </esp-web-install-button>
-          </div>
-
-          <div class="panel-box">
-            <h3 id="localBinTitle">本機選擇 merged-binary.bin 檔案</h3>
-            <p id="localBinDesc">
-              可先選取本機的 merged-binary.bin 驗證檔案名稱與大小，再搭配 USB 序列埠工具燒錄。
-            </p>
-            <input id="binFileInput" type="file" accept=".bin" />
-            <button id="checkBinBtn" type="button">檢查固件檔案</button>
-            <div id="binStatus" class="status-line" id="defaultBinStatus">尚未選擇檔案</div>
-          </div>
         </div>
-      </div>
+
+        <div class="status">
+            <span id="statusText" class="disconnected">未連接設備</span>
+        </div>
+
+        <div class="data-point">
+            <div class="data-card">
+                <div class="data-title">ADC0 電壓</div>
+                <div class="data-value adc0-value">--.-- V</div>
+                <div class="timestamp">最後更新: <span id="adc0Time">--:--:--</span></div>
+            </div>
+
+            <div class="data-card">
+                <div class="data-title">ADC1 電壓</div>
+                <div class="data-value adc1-value">--.-- V</div>
+                <div class="timestamp">最後更新: <span id="adc1Time">--:--:--</span></div>
+            </div>
+        </div>
+
+        <div class="chart-container">
+            <canvas id="voltageChart"></canvas>
+        </div>
+
+        <div class="console-container">
+            <div class="console-header" id="consoleHeader">
+                <div>調試控制台</div>
+                <div id="consoleStatus">▼</div>
+            </div>
+            <div class="console-content" id="consoleContent"></div>
+        </div>
     </div>
-  </header>
 
-  <main>
-    <section class="hero">
-      <h1 id="heroTitle">ESP32 裝置控制與固件部署中心</h1>
-      <p id="heroDesc">
-        點擊上方「ESP32 配置 / 燒錄固件」按鈕即可展開燒錄面板。本頁面已採用繁體中文與英文雙語介面，適合直接託管於 GitHub Pages。
-      </p>
-    </section>
+    <script>
+        // BLE UUIDs
+        const SERVICE_UUID = '4fafc201-1fb5-459e-8fcc-c5c9c331914b';
+        const CHAR_ADC0_UUID = '2b7e8251-2877-41c3-b46e-cf057c562023';
+        const CHAR_ADC1_UUID = '3b7e8251-2877-41c3-b46e-cf057c562023';
 
-    <section class="cards">
-      <div class="card">
-        <h2 id="card1Title">合併固件燒錄（merged-binary.bin）</h2>
-        <p id="card1Desc">
-          支援將已合併 Bootloader、Partition Table 與應用程式的 merged-binary.bin 直接寫入 ESP32 快閃記憶體。
-        </p>
-      </div>
-      <div class="card">
-        <h2 id="card2Title">繁中 / 英文雙語介面</h2>
-        <p id="card2Desc">
-          所有主頁面標題、說明與按鈕皆提供繁體中文與英文切換，方便教學與跨語系使用。
-        </p>
-      </div>
-      <div class="card">
-        <h2 id="card3Title">GitHub Pages 靜態託管</h2>
-        <p id="card3Desc">
-          純前端靜態網頁架構，可直接推送至 GitHub Repository 並啟用 GitHub Pages 發布。
-        </p>
-      </div>
-    </section>
+        // DOM元素
+        const connectBtn = document.getElementById('connectBtn');
+        const disconnectBtn = document.getElementById('disconnectBtn');
+        const toggleConsoleBtn = document.getElementById('toggleConsoleBtn');
+        const clearConsoleBtn = document.getElementById('clearConsoleBtn');
+        const toggleFlashDrawerBtn = document.getElementById('toggleFlashDrawerBtn');
+        const flashDrawer = document.getElementById('flashDrawer');
+        const statusText = document.getElementById('statusText');
+        const consoleContent = document.getElementById('consoleContent');
+        const consoleContainer = document.querySelector('.console-container');
+        const consoleHeader = document.getElementById('consoleHeader');
+        const consoleStatus = document.getElementById('consoleStatus');
+        const adc0Value = document.querySelector('.adc0-value');
+        const adc1Value = document.querySelector('.adc1-value');
+        const adc0Time = document.getElementById('adc0Time');
+        const adc1Time = document.getElementById('adc1Time');
 
-    <section class="guide">
-      <h2 id="guideTitle">GitHub Pages 檔案放置與部署步驟</h2>
-      <ol id="guideSteps">
-        <li>在 GitHub 建立儲存庫（例如 <code>esp32-web-flasher</code>），將 <code>index.html</code> 放在儲存庫根目錄。</li>
-        <li>將 <code>merged-binary.bin</code> 放在同一目錄（例如 <code>./firmware/merged-binary.bin</code>），並建立對應的 <code>manifest.json</code>。</li>
-        <li>若 <code>merged-binary.bin</code> 檔案較大，建議改放於同儲存庫的 <strong>GitHub Releases</strong> 附件，並於 <code>manifest.json</code> 填入對應下載網址。</li>
-        <li>前往 GitHub 儲存庫的 <strong>Settings &gt; Pages</strong>，選擇分支（如 <code>main</code>）與資料夾（<code>/ (root)</code>）儲存並啟用 HTTPS。</li>
-      </ol>
-      <pre><code>專案目錄建議結構：
-├── index.html
-├── manifest.json
-└── firmware/
-    └── merged-binary.bin</code></pre>
-      <p class="note" id="manifestTip">
-        提示：<code>esp-web-tools</code> 需要透過 <code>manifest.json</code> 指定 <code>merged-binary.bin</code> 的路徑與起始位址（通常為 <code>0x0</code>），且必須在 <code>https://</code>（或 <code>localhost</code>）下才能存取 Web Serial。
-      </p>
-    </section>
-  </main>
+        // 儲存資料的陣列（最多100個點）
+        let adc0Data = [];
+        let adc1Data = [];
+        const MAX_DATA_POINTS = 100;
 
-  <script>
-    const i18n = {
-      "zh-Hant": {
-        langBtn: "English",
-        brandTitle: "ESP32 硬體與固件中心",
-        toggleOpen: "ESP32 配置 / 燒錄固件",
-        toggleClose: "收合 ESP32 配置",
-        drawerTitle: "ESP32 配置與固件燒錄（merged-binary.bin）",
-        browserHint: "請使用 Chrome 或 Edge 透過 USB 連接裝置（HTTPS 環境）",
-        webFlashTitle: "一鍵網頁燒錄（Manifest 模式）",
-        webFlashDesc: "透過 GitHub Pages 託管的 manifest.json 自動載入 merged-binary.bin 並燒錄至 ESP32。",
-        connectFlashBtn: "連接並燒錄固件",
-        localBinTitle: "本機選擇 merged-binary.bin 檔案",
-        localBinDesc: "可先選取本機的 merged-binary.bin 驗證檔案名稱與大小，再搭配 USB 序列埠工具燒錄。",
-        checkBinBtn: "檢查固件檔案",
-        noFile: "尚未選擇檔案",
-        heroTitle: "ESP32 裝置控制與固件部署中心",
-        heroDesc: "點擊上方「ESP32 配置 / 燒錄固件」按鈕即可展開燒錄面板。本頁面已採用繁體中文與英文雙語介面，適合直接託管於 GitHub Pages。",
-        card1Title: "合併固件燒錄（merged-binary.bin）",
-        card1Desc: "支援將已合併 Bootloader、Partition Table 與應用程式的 merged-binary.bin 直接寫入 ESP32 快閃記憶體。",
-        card2Title: "繁中 / 英文雙語介面",
-        card2Desc: "所有主頁面標題、說明與按鈕皆提供繁體中文與英文切換，方便教學與跨語系使用。",
-        card3Title: "GitHub Pages 靜態託管",
-        card3Desc: "純前端靜態網頁架構，可直接推送至 GitHub Repository 並啟用 GitHub Pages 發布。",
-        guideTitle: "GitHub Pages 檔案放置與部署步驟",
-        guideSteps: [
-          "在 GitHub 建立儲存庫（例如 <code>esp32-web-flasher</code>），將 <code>index.html</code> 放在儲存庫根目錄。",
-          "將 <code>merged-binary.bin</code> 放在同一目錄（例如 <code>./firmware/merged-binary.bin</code>），並建立對應的 <code>manifest.json</code>。",
-          "若 <code>merged-binary.bin</code> 檔案較大，建議改放於同儲存庫的 <strong>GitHub Releases</strong> 附件，並於 <code>manifest.json</code> 填入對應下載網址。",
-          "前往 GitHub 儲存庫的 <strong>Settings &gt; Pages</strong>，選擇分支（如 <code>main</code>）與資料夾（<code>/ (root)</code>）儲存並啟用 HTTPS。"
-        ],
-        manifestTip: "提示：<code>esp-web-tools</code> 需要透過 <code>manifest.json</code> 指定 <code>merged-binary.bin</code> 的路徑與起始位址（通常為 <code>0x0</code>），且必須在 <code>https://</code>（或 <code>localhost</code>）下才能存取 Web Serial。"
-      },
-      "en": {
-        langBtn: "繁體中文",
-        brandTitle: "ESP32 Hardware & Firmware Hub",
-        toggleOpen: "ESP32 Config / Flash Firmware",
-        toggleClose: "Hide ESP32 Config",
-        drawerTitle: "ESP32 Configuration & Firmware Flashing (merged-binary.bin)",
-        browserHint: "Use Chrome or Edge over USB in an HTTPS context",
-        webFlashTitle: "One-Click Web Flash (Manifest Mode)",
-        webFlashDesc: "Load merged-binary.bin via manifest.json hosted on GitHub Pages and flash to ESP32.",
-        connectFlashBtn: "Connect & Flash Firmware",
-        localBinTitle: "Select Local merged-binary.bin File",
-        localBinDesc: "Select a local merged-binary.bin file to verify its name and size before flashing via USB serial.",
-        checkBinBtn: "Verify Firmware File",
-        noFile: "No file selected",
-        heroTitle: "ESP32 Device Control & Firmware Deployment Hub",
-        heroDesc: "Click \"ESP32 Config / Flash Firmware\" at the top to expand the flashing panel. All main page text is available in Traditional Chinese and English for GitHub Pages.",
-        card1Title: "Merged Binary Flashing (merged-binary.bin)",
-        card1Desc: "Supports writing merged-binary.bin (combining bootloader, partition table, and app) into ESP32 flash.",
-        card2Title: "Traditional Chinese & English UI",
-        card2Desc: "Switch seamlessly between Traditional Chinese and English across headings, descriptions, and controls.",
-        card3Title: "GitHub Pages Static Hosting",
-        card3Desc: "Static front-end implementation ready to push to a GitHub repository and publish via GitHub Pages.",
-        guideTitle: "How to Place Files & Deploy on GitHub Pages",
-        guideSteps: [
-          "Create a GitHub repository (e.g., <code>esp32-web-flasher</code>) and place <code>index.html</code> in the repository root.",
-          "Place <code>merged-binary.bin</code> in your project (e.g., <code>./firmware/merged-binary.bin</code>) and add a matching <code>manifest.json</code>.",
-          "If <code>merged-binary.bin</code> is large, attach it to a <strong>GitHub Release</strong> in the same repository and reference its URL in <code>manifest.json</code>.",
-          "Go to <strong>Settings &gt; Pages</strong> in your repository, select your branch (e.g., <code>main</code>) and folder (<code>/ (root)</code>), and ensure HTTPS is enabled."
-        ],
-        manifestTip: "Tip: <code>esp-web-tools</code> uses <code>manifest.json</code> to point to <code>merged-binary.bin</code> and its flash offset (typically <code>0x0</code>), and requires <code>https://</code> (or <code>localhost</code>) for Web Serial."
-      }
-    };
+        // BLE相關變數
+        let device = null;
+        let adc0Characteristic = null;
+        let adc1Characteristic = null;
+        let isConnected = false;
 
-    let currentLang = "zh-Hant";
-    let isDrawerOpen = false;
+        // Chart.js實例
+        let voltageChart = null;
 
-    const toggleEspBtn = document.getElementById("toggleEspBtn");
-    const espDrawer = document.getElementById("espDrawer");
-    const langBtn = document.getElementById("langBtn");
-    const binFileInput = document.getElementById("binFileInput");
-    const checkBinBtn = document.getElementById("checkBinBtn");
-    const binStatus = document.getElementById("binStatus");
+        // 初始化圖表（空圖表）
+        function initChart() {
+            const ctx = document.getElementById('voltageChart').getContext('2d');
 
-    function applyLanguage(lang) {
-      currentLang = lang;
-      document.documentElement.lang = lang;
-      const t = i18n[lang];
+            voltageChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        {
+                            label: 'ADC0 電壓',
+                            data: [],
+                            borderColor: '#4facfe',
+                            backgroundColor: 'rgba(79, 172, 254, 0.1)',
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            tension: 0.3,
+                            fill: true
+                        },
+                        {
+                            label: 'ADC1 電壓',
+                            data: [],
+                            borderColor: '#00f2fe',
+                            backgroundColor: 'rgba(0, 242, 254, 0.1)',
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            tension: 0.3,
+                            fill: true
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: {
+                        duration: 0
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 3.5,
+                            title: {
+                                display: true,
+                                text: '電壓 (V)',
+                                color: '#aaa'
+                            },
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.1)'
+                            },
+                            ticks: {
+                                color: '#aaa'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: '採樣點',
+                                color: '#aaa'
+                            },
+                            grid: {
+                                display: false
+                            },
+                            ticks: {
+                                color: '#aaa'
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: '#ddd',
+                                font: {
+                                    size: 14
+                                }
+                            }
+                        },
+                        tooltip: {
+                            enabled: false
+                        }
+                    }
+                }
+            });
+        }
 
-      langBtn.textContent = t.langBtn;
-      document.getElementById("brandTitle").textContent = t.brandTitle;
-      toggleEspBtn.textContent = isDrawerOpen ? t.toggleClose : t.toggleOpen;
-      document.getElementById("drawerTitle").textContent = t.drawerTitle;
-      document.getElementById("browserHint").textContent = t.browserHint;
-      document.getElementById("webFlashTitle").textContent = t.webFlashTitle;
-      document.getElementById("webFlashDesc").textContent = t.webFlashDesc;
-      document.getElementById("connectFlashBtn").textContent = t.connectFlashBtn;
-      document.getElementById("localBinTitle").textContent = t.localBinTitle;
-      document.getElementById("localBinDesc").textContent = t.localBinDesc;
-      checkBinBtn.textContent = t.checkBinBtn;
-      if (!binFileInput.files || binFileInput.files.length === 0) {
-        binStatus.textContent = t.noFile;
-      }
+        // 更新圖表資料
+        function updateChart() {
+            if (voltageChart) {
+                voltageChart.data.datasets[0].data = adc0Data;
+                voltageChart.data.datasets[1].data = adc1Data;
 
-      document.getElementById("heroTitle").textContent = t.heroTitle;
-      document.getElementById("heroDesc").textContent = t.heroDesc;
-      document.getElementById("card1Title").textContent = t.card1Title;
-      document.getElementById("card1Desc").textContent = t.card1Desc;
-      document.getElementById("card2Title").textContent = t.card2Title;
-      document.getElementById("card2Desc").textContent = t.card2Desc;
-      document.getElementById("card3Title").textContent = t.card3Title;
-      document.getElementById("card3Desc").textContent = t.card3Desc;
-      document.getElementById("guideTitle").textContent = t.guideTitle;
+                // 僅在有資料時顯示點
+                voltageChart.data.datasets[0].pointRadius = adc0Data.length > 0 ? 3 : 0;
+                voltageChart.data.datasets[1].pointRadius = adc1Data.length > 0 ? 3 : 0;
 
-      const stepsList = document.getElementById("guideSteps");
-      stepsList.innerHTML = t.guideSteps.map((step) => `<li>${step}</li>`).join("");
-      document.getElementById("manifestTip").innerHTML = t.manifestTip;
-    }
+                // 更新標籤
+                const labels = [];
+                for (let i = 0; i < Math.max(adc0Data.length, adc1Data.length); i++) {
+                    labels.push(i + 1);
+                }
+                voltageChart.data.labels = labels;
 
-    toggleEspBtn.addEventListener("click", () => {
-      isDrawerOpen = !isDrawerOpen;
-      espDrawer.classList.toggle("open", isDrawerOpen);
-      toggleEspBtn.setAttribute("aria-expanded", String(isDrawerOpen));
-      toggleEspBtn.textContent = isDrawerOpen ? i18n[currentLang].toggleClose : i18n[currentLang].toggleOpen;
-    });
+                voltageChart.update();
+            }
+        }
 
-    langBtn.addEventListener("click", () => {
-      applyLanguage(currentLang === "zh-Hant" ? "en" : "zh-Hant");
-    });
+        // 新增資料點（確保不超過最大數量）
+        function addDataPoint(adc0, adc1) {
+            if (!isConnected) return;
 
-    checkBinBtn.addEventListener("click", () => {
-      const file = binFileInput.files && binFileInput.files[0];
-      if (!file) {
-        binStatus.textContent = currentLang === "zh-Hant"
-          ? "請先選擇 merged-binary.bin 檔案。"
-          : "Please choose a merged-binary.bin file first.";
-        return;
-      }
-      const sizeKB = (file.size / 1024).toFixed(1);
-      const isMergedName = file.name.toLowerCase().includes("merged");
-      if (currentLang === "zh-Hant") {
-        binStatus.textContent = `已選取：${file.name}（${sizeKB} KB）${isMergedName ? "｜檔名符合 merged 固件" : "｜提醒：建議確認是否為 merged-binary.bin"}`;
-      } else {
-        binStatus.textContent = `Selected: ${file.name} (${sizeKB} KB) ${isMergedName ? "| Filename matches merged binary" : "| Note: verify this is a merged-binary.bin"}`;
-      }
-    });
+            const now = new Date();
+            const timeString = now.toTimeString().split(' ')[0];
 
-    applyLanguage("zh-Hant");
-  </script>
+            adc0Data.push(adc0);
+            adc1Data.push(adc1);
+
+            adc0Value.textContent = adc0.toFixed(3) + " V";
+            adc1Value.textContent = adc1.toFixed(3) + " V";
+            adc0Time.textContent = timeString;
+            adc1Time.textContent = timeString;
+
+            if (adc0Data.length > MAX_DATA_POINTS) {
+                adc0Data.shift();
+            }
+            if (adc1Data.length > MAX_DATA_POINTS) {
+                adc1Data.shift();
+            }
+
+            updateChart();
+        }
+
+        // 重設圖表與資料
+        function resetData() {
+            adc0Data = [];
+            adc1Data = [];
+            adc0Value.textContent = "--.-- V";
+            adc1Value.textContent = "--.-- V";
+            adc0Time.textContent = "--:--:--";
+            adc1Time.textContent = "--:--:--";
+            updateChart();
+        }
+
+        // 新增日誌到控制台
+        function logToConsole(message) {
+            const now = new Date();
+            const timeString = now.toTimeString().split(' ')[0];
+            const logLine = document.createElement('div');
+            logLine.className = 'console-line';
+            logLine.textContent = `[${timeString}] ${message}`;
+            consoleContent.appendChild(logLine);
+
+            consoleContent.scrollTop = consoleContent.scrollHeight;
+        }
+
+        // 切換 ESP32 燒錄展開欄
+        function toggleFlashDrawer() {
+            const isOpen = flashDrawer.classList.toggle('open');
+            toggleFlashDrawerBtn.setAttribute('aria-expanded', String(isOpen));
+            toggleFlashDrawerBtn.textContent = isOpen ? '收合燒錄欄' : 'ESP32 燒錄';
+        }
+
+        // 連接 BLE 設備
+        async function connectToDevice() {
+            logToConsole('嘗試連接設備...');
+
+            try {
+                device = await navigator.bluetooth.requestDevice({
+                    filters: [{ namePrefix: 'ESP32' }],
+                    optionalServices: [SERVICE_UUID]
+                });
+
+                logToConsole(`找到設備: ${device.name}`);
+                resetData();
+                logToConsole('連接到 GATT 伺服器...');
+
+                const server = await device.gatt.connect();
+                logToConsole('GATT 伺服器已連接');
+
+                const service = await server.getPrimaryService(SERVICE_UUID);
+                logToConsole('服務已獲取');
+
+                adc0Characteristic = await service.getCharacteristic(CHAR_ADC0_UUID);
+                await adc0Characteristic.startNotifications();
+                adc0Characteristic.addEventListener('characteristicvaluechanged', handleADC0Data);
+                logToConsole('ADC0 通知已啟用');
+
+                adc1Characteristic = await service.getCharacteristic(CHAR_ADC1_UUID);
+                await adc1Characteristic.startNotifications();
+                adc1Characteristic.addEventListener('characteristicvaluechanged', handleADC1Data);
+                logToConsole('ADC1 通知已啟用');
+
+                isConnected = true;
+
+                statusText.textContent = `已連接到 ${device.name}`;
+                statusText.className = 'connected';
+                connectBtn.disabled = true;
+                disconnectBtn.disabled = false;
+
+                logToConsole('設備連接成功，開始接收資料...');
+            } catch (error) {
+                logToConsole(`連接失敗: ${error}`);
+                statusText.textContent = '連接失敗';
+                statusText.className = 'disconnected';
+                isConnected = false;
+            }
+        }
+
+        // 處理 ADC0 資料
+        function handleADC0Data(event) {
+            const value = event.target.value;
+            const decoder = new TextDecoder('utf-8');
+            const voltage = parseFloat(decoder.decode(value));
+
+            if (!isNaN(voltage)) {
+                logToConsole(`收到 ADC0 資料: ${voltage.toFixed(3)}V`);
+                const adc1Latest = adc1Data.length > 0 ? adc1Data[adc1Data.length - 1] : 0;
+                addDataPoint(voltage, adc1Latest);
+            }
+        }
+
+        // 處理 ADC1 資料
+        function handleADC1Data(event) {
+            const value = event.target.value;
+            const decoder = new TextDecoder('utf-8');
+            const voltage = parseFloat(decoder.decode(value));
+
+            if (!isNaN(voltage)) {
+                logToConsole(`收到 ADC1 資料: ${voltage.toFixed(3)}V`);
+                const adc0Latest = adc0Data.length > 0 ? adc0Data[adc0Data.length - 1] : 0;
+                addDataPoint(adc0Latest, voltage);
+            }
+        }
+
+        // 斷開設備連接
+        async function disconnectDevice() {
+            if (device && device.gatt.connected) {
+                if (adc0Characteristic) {
+                    await adc0Characteristic.stopNotifications();
+                    adc0Characteristic.removeEventListener('characteristicvaluechanged', handleADC0Data);
+                }
+
+                if (adc1Characteristic) {
+                    await adc1Characteristic.stopNotifications();
+                    adc1Characteristic.removeEventListener('characteristicvaluechanged', handleADC1Data);
+                }
+
+                await device.gatt.disconnect();
+                logToConsole('設備已斷開連接');
+            }
+
+            isConnected = false;
+            device = null;
+            adc0Characteristic = null;
+            adc1Characteristic = null;
+
+            statusText.textContent = '未連接設備';
+            statusText.className = 'disconnected';
+            connectBtn.disabled = false;
+            disconnectBtn.disabled = true;
+        }
+
+        // 切換控制台顯示
+        function toggleConsole() {
+            consoleContainer.classList.toggle('collapsed');
+            consoleStatus.textContent = consoleContainer.classList.contains('collapsed') ? '►' : '▼';
+            toggleConsoleBtn.textContent = consoleContainer.classList.contains('collapsed') ?
+                '顯示控制台' : '隱藏控制台';
+        }
+
+        // 清空控制台
+        function clearConsole() {
+            consoleContent.innerHTML = '';
+            logToConsole('控制台已清空');
+        }
+
+        // 頁面載入完成後初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            initChart();
+
+            connectBtn.addEventListener('click', connectToDevice);
+            disconnectBtn.addEventListener('click', disconnectDevice);
+            toggleConsoleBtn.addEventListener('click', toggleConsole);
+            clearConsoleBtn.addEventListener('click', clearConsole);
+            consoleHeader.addEventListener('click', toggleConsole);
+            toggleFlashDrawerBtn.addEventListener('click', toggleFlashDrawer);
+
+            disconnectBtn.disabled = true;
+            isConnected = false;
+
+            logToConsole('系統已啟動，點擊"連接設備"按鈕開始');
+            logToConsole('設備名稱: ESP32_ADC_Server');
+            logToConsole('ADC0 UUID: 2b7e8251-2877-41c3-b46e-cf057c562023');
+            logToConsole('ADC1 UUID: 3b7e8251-2877-41c3-b46e-cf057c562023');
+        });
+    </script>
 </body>
+
 </html>
