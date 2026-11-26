@@ -1,0 +1,15 @@
+{
+  "name": "ESP32 Group 03",
+  "version": "1.0.0",
+  "new_install_prompt_erase": true,
+  "builds": [
+    {
+      "parts": [
+        {
+          "path": "./03.bin",
+          "offset": 0
+        }
+      ]
+    }
+  ]
+}
