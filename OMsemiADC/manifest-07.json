@@ -1,1 +1,16 @@
+{
+  "name": "ESP32 Group 07",
+  "version": "1.0.0",
+  "new_install_prompt_erase": true,
+  "builds": [
+    {
+      "parts": [
+        {
+          "path": "./07.bin",
+          "offset": 0
+        }
+      ]
+    }
+  ]
+}
 
