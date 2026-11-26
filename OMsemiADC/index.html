@@ -110,7 +110,7 @@
         /* 精簡型 ESP32 燒錄展開欄 */
         .flash-drawer {
             display: none;
-            max-width: 680px;
+            max-width: 740px;
             margin: 0 auto 24px;
             background: rgba(255, 255, 255, 0.12);
             backdrop-filter: blur(10px);
@@ -141,7 +141,7 @@
         .flash-drawer-meta {
             font-size: 0.85rem;
             opacity: 0.85;
-            margin-top: 6px;
+            margin-top: 8px;
         }
 
         .flash-drawer-meta code {
@@ -156,6 +156,22 @@
             align-items: center;
             gap: 10px;
             flex-wrap: wrap;
+        }
+
+        .group-select {
+            background: rgba(15, 23, 42, 0.75);
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 20px;
+            padding: 8px 14px;
+            font-size: 0.92rem;
+            font-weight: 600;
+            cursor: pointer;
+            outline: none;
+        }
+
+        .group-select:focus {
+            border-color: #00f2fe;
         }
 
         .flash-drawer-actions button,
@@ -312,14 +328,36 @@
             <div class="flash-drawer-top">
                 <span class="flash-drawer-title">ESP32 固件燒錄</span>
                 <div class="flash-drawer-actions">
-                    <esp-web-install-button manifest="./manifest.json">
-                        <button slot="activate" type="button">燒錄同級固件</button>
+                    <select id="groupSelect" class="group-select" aria-label="選擇組別固件">
+                        <option value="01.bin">第 01 組 (01.bin)</option>
+                        <option value="02.bin">第 02 組 (02.bin)</option>
+                        <option value="03.bin">第 03 組 (03.bin)</option>
+                        <option value="04.bin">第 04 組 (04.bin)</option>
+                        <option value="05.bin">第 05 組 (05.bin)</option>
+                        <option value="06.bin">第 06 組 (06.bin)</option>
+                        <option value="07.bin">第 07 組 (07.bin)</option>
+                        <option value="08.bin">第 08 組 (08.bin)</option>
+                        <option value="09.bin">第 09 組 (09.bin)</option>
+                        <option value="10.bin">第 10 組 (10.bin)</option>
+                        <option value="11.bin">第 11 組 (11.bin)</option>
+                        <option value="12.bin">第 12 組 (12.bin)</option>
+                        <option value="13.bin">第 13 組 (13.bin)</option>
+                        <option value="14.bin">第 14 組 (14.bin)</option>
+                        <option value="15.bin">第 15 組 (15.bin)</option>
+                        <option value="16.bin">第 16 組 (16.bin)</option>
+                        <option value="17.bin">第 17 組 (17.bin)</option>
+                        <option value="18.bin">第 18 組 (18.bin)</option>
+                        <option value="19.bin">第 19 組 (19.bin)</option>
+                        <option value="20.bin">第 20 組 (20.bin)</option>
+                    </select>
+                    <esp-web-install-button id="groupFlashBtn">
+                        <button slot="activate" type="button">燒錄所選組別</button>
                     </esp-web-install-button>
-                    <a class="btn-link" href="./merged-binary.bin" download="merged-binary.bin">下載 BIN</a>
+                    <a id="downloadBinLink" class="btn-link" href="./01.bin" download="01.bin">下載 BIN</a>
                 </div>
             </div>
             <p class="flash-drawer-meta">
-                使用同級目錄檔案：<code>./merged-binary.bin</code>（需搭配同級 <code>./manifest.json</code> 與 HTTPS 連線）
+                目前燒錄同級檔案：<code id="currentBinPath">./01.bin</code>（需 HTTPS 連線與支援 Web Serial 的瀏覽器）
             </p>
         </div>
 
@@ -367,6 +405,10 @@
         const clearConsoleBtn = document.getElementById('clearConsoleBtn');
         const toggleFlashDrawerBtn = document.getElementById('toggleFlashDrawerBtn');
         const flashDrawer = document.getElementById('flashDrawer');
+        const groupSelect = document.getElementById('groupSelect');
+        const groupFlashBtn = document.getElementById('groupFlashBtn');
+        const downloadBinLink = document.getElementById('downloadBinLink');
+        const currentBinPath = document.getElementById('currentBinPath');
         const statusText = document.getElementById('statusText');
         const consoleContent = document.getElementById('consoleContent');
         const consoleContainer = document.querySelector('.console-container');
@@ -390,6 +432,41 @@
 
         // Chart.js實例
         let voltageChart = null;
+
+        // 動態 manifest Blob URL
+        let currentManifestUrl = null;
+
+        // 更新所選組別的 manifest 與下載連結
+        function updateGroupFirmware(binFileName) {
+            const relativeUrl = new URL(`./${binFileName}`, window.location.href).href;
+            const manifestObj = {
+                name: `ESP32 Firmware - ${binFileName}`,
+                version: '1.0.0',
+                new_install_prompt_erase: true,
+                builds: [
+                    {
+                        parts: [
+                            {
+                                path: relativeUrl,
+                                offset: 0
+                            }
+                        ]
+                    }
+                ]
+            };
+
+            if (currentManifestUrl) {
+                URL.revokeObjectURL(currentManifestUrl);
+            }
+
+            const blob = new Blob([JSON.stringify(manifestObj)], { type: 'application/json' });
+            currentManifestUrl = URL.createObjectURL(blob);
+            groupFlashBtn.setAttribute('manifest', currentManifestUrl);
+
+            downloadBinLink.href = `./${binFileName}`;
+            downloadBinLink.setAttribute('download', binFileName);
+            currentBinPath.textContent = `./${binFileName}`;
+        }
 
         // 初始化圖表（空圖表）
         function initChart() {
@@ -668,6 +745,7 @@
         // 頁面載入完成後初始化
         document.addEventListener('DOMContentLoaded', () => {
             initChart();
+            updateGroupFirmware(groupSelect.value);
 
             connectBtn.addEventListener('click', connectToDevice);
             disconnectBtn.addEventListener('click', disconnectDevice);
@@ -675,6 +753,7 @@
             clearConsoleBtn.addEventListener('click', clearConsole);
             consoleHeader.addEventListener('click', toggleConsole);
             toggleFlashDrawerBtn.addEventListener('click', toggleFlashDrawer);
+            groupSelect.addEventListener('change', (e) => updateGroupFirmware(e.target.value));
 
             disconnectBtn.disabled = true;
             isConnected = false;
