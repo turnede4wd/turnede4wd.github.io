@@ -1,69 +1,274 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-HK">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>鳥巢監測 dashboard</title>
+  <title>鳥巢生態雙節點監測系統</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     :root {
-      --bg-color: #f4f6f9;
-      --card-bg: #ffffff;
-      --primary-color: #2c3e50;
-      --border-radius: 12px;
+      --bg-base: #060b09;
+      --bg-forest: #0b1713;
+      --glass-bg: rgba(14, 26, 22, 0.58);
+      --glass-bg-elevated: rgba(20, 38, 32, 0.65);
+      --glass-border: rgba(52, 211, 153, 0.18);
+      --glass-border-hover: rgba(52, 211, 153, 0.42);
+      --accent-emerald: #10b981;
+      --accent-cyan: #38bdf8;
+      --accent-amber: #f59e0b;
+      --accent-coral: #f87171;
+      --text-primary: #ecfdf5;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --radius-lg: 16px;
+      --radius-md: 12px;
+      --radius-sm: 8px;
+    }
+
+    * {
+      box-sizing: border-box;
     }
 
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      background-color: var(--bg-color);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg-base);
+      background-image:
+        radial-gradient(circle at 12% 10%, rgba(16, 185, 129, 0.14) 0%, transparent 38%),
+        radial-gradient(circle at 88% 18%, rgba(56, 189, 248, 0.10) 0%, transparent 40%),
+        radial-gradient(circle at 50% 90%, rgba(6, 78, 59, 0.22) 0%, transparent 50%),
+        linear-gradient(180deg, var(--bg-forest) 0%, var(--bg-base) 100%);
+      background-attachment: fixed;
       margin: 0;
-      padding: 20px;
-      color: #333;
+      padding: 24px 20px 48px;
+      color: var(--text-primary);
+      min-height: 100vh;
+    }
+
+    /* 背景微細科技網格紋理 */
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(52, 211, 153, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(52, 211, 153, 0.03) 1px, transparent 1px);
+      background-size: 36px 36px;
+      pointer-events: none;
+      z-index: -1;
     }
 
     .container {
-      max-width: 1000px;
+      max-width: 1560px;
       margin: 0 auto;
     }
 
-    h1 {
-      text-align: center;
+    /* 頂部系統標題列 */
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+      padding: 18px 24px;
       margin-bottom: 24px;
-      font-size: 1.8rem;
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius-lg);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .brand-mark {
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.25), rgba(56, 189, 248, 0.15));
+      border: 1px solid rgba(52, 211, 153, 0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--accent-emerald);
+      box-shadow: 0 0 18px rgba(16, 185, 129, 0.2);
+    }
+
+    .brand-title {
+      margin: 0;
+      font-size: 1.35rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      color: var(--text-primary);
+    }
+
+    .brand-subtitle {
+      font-size: 0.78rem;
+      color: var(--text-secondary);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-top: 2px;
+    }
+
+    .system-status {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+    }
+
+    .live-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      border-radius: 999px;
+      background: rgba(16, 185, 129, 0.12);
+      border: 1px solid rgba(16, 185, 129, 0.35);
+      color: #6ee7b7;
+      font-weight: 500;
+      font-size: 0.8rem;
+      letter-spacing: 0.05em;
+    }
+
+    .pulse-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent-emerald);
+      box-shadow: 0 0 10px var(--accent-emerald);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.45; transform: scale(0.85); }
+    }
+
+    /* 左右兩大列網格 */
+    .dual-columns {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 24px;
+      align-items: start;
+    }
+
+    @media (max-width: 1120px) {
+      .dual-columns {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* 單一攝像頭主列容器 */
+    .cam-column {
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius-lg);
+      padding: 20px;
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .cam-column-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 14px;
+      border-bottom: 1px solid rgba(52, 211, 153, 0.14);
+    }
+
+    .cam-id-tag {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .cam-code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.85rem;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 6px;
+      background: rgba(16, 185, 129, 0.16);
+      border: 1px solid rgba(16, 185, 129, 0.4);
+      color: #6ee7b7;
+      letter-spacing: 0.06em;
+    }
+
+    .cam-column[data-cam="2"] .cam-code {
+      background: rgba(56, 189, 248, 0.16);
+      border-color: rgba(56, 189, 248, 0.4);
+      color: #7dd3fc;
+    }
+
+    .cam-name {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .cam-node-state {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+
+    /* 區塊小標題 */
+    .block-panel {
+      background: var(--glass-bg-elevated);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: var(--radius-md);
+      padding: 16px;
     }
 
     .section-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 16px;
+      margin-bottom: 12px;
       flex-wrap: wrap;
-      gap: 12px;
+      gap: 10px;
     }
 
     .section-title {
       margin: 0;
-      font-size: 1.2rem;
-      color: var(--primary-color);
+      font-size: 0.92rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      color: #cbd5e1;
       display: flex;
       align-items: center;
       gap: 8px;
     }
 
-    /* 1. 顶部最新照片展示区 (固定比例 + 黑色衬底) */
-    .hero-photo-container {
-      background: var(--card-bg);
-      padding: 16px;
-      border-radius: var(--border-radius);
-      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-      margin-bottom: 24px;
+    .section-title::before {
+      content: "";
+      width: 3px;
+      height: 14px;
+      border-radius: 2px;
+      background: var(--accent-emerald);
     }
 
+    .cam-column[data-cam="2"] .section-title::before {
+      background: var(--accent-cyan);
+    }
+
+    /* 1. 最新抓拍畫面 */
     .aspect-ratio-box {
       width: 100%;
-      aspect-ratio: 16 / 9; /* 固定16:9长宽比，随页面自适应 */
-      background-color: #000000; /* 加黑边背景 */
-      border-radius: 8px;
+      aspect-ratio: 16 / 9;
+      background: radial-gradient(circle at center, #0d1714 0%, #030605 100%);
+      border: 1px solid rgba(52, 211, 153, 0.15);
+      border-radius: var(--radius-sm);
       overflow: hidden;
       display: flex;
       align-items: center;
@@ -74,8 +279,14 @@
     .aspect-ratio-box img {
       width: 100%;
       height: 100%;
-      object-fit: contain; /* 保持原图比例并留白/留黑边 */
+      object-fit: contain;
       display: block;
+    }
+
+    .placeholder-text {
+      color: var(--text-muted);
+      font-size: 0.88rem;
+      letter-spacing: 0.04em;
     }
 
     .hero-photo-info {
@@ -83,100 +294,176 @@
       bottom: 0;
       left: 0;
       right: 0;
-      padding: 8px 16px;
-      background: rgba(0, 0, 0, 0.65);
-      color: #fff;
-      font-size: 0.9rem;
+      padding: 8px 14px;
+      background: linear-gradient(180deg, rgba(4, 10, 8, 0.4) 0%, rgba(4, 10, 8, 0.88) 100%);
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      color: #e2e8f0;
+      font-size: 0.8rem;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
       display: flex;
       justify-content: space-between;
-      backdrop-filter: blur(4px);
+      backdrop-filter: blur(8px);
     }
 
-    /* 2. 传感器数据卡片区 */
-    .cards {
+    /* 2. 三項環境傳感器卡片 */
+    .sensor-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 16px;
-      margin-bottom: 24px;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
     }
 
-    .card {
-      background: var(--card-bg);
-      padding: 20px;
-      border-radius: var(--border-radius);
-      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-      text-align: center;
+    @media (max-width: 560px) {
+      .sensor-grid {
+        grid-template-columns: 1fr;
+      }
     }
 
-    .card .label {
-      font-size: 0.95rem;
-      color: #666;
+    .sensor-card {
+      background: rgba(9, 18, 15, 0.65);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      border-radius: var(--radius-md);
+      padding: 14px 16px;
+      position: relative;
+      overflow: hidden;
+      transition: border-color 0.25s ease, transform 0.25s ease;
     }
 
-    .card .value {
-      font-size: 2.2rem;
-      font-weight: bold;
+    .sensor-card:hover {
+      border-color: var(--glass-border-hover);
+      transform: translateY(-2px);
+    }
+
+    .sensor-card::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: var(--card-accent, var(--accent-emerald));
+      opacity: 0.75;
+    }
+
+    .sensor-card.temp { --card-accent: var(--accent-coral); }
+    .sensor-card.hum  { --card-accent: var(--accent-cyan); }
+    .sensor-card.lux  { --card-accent: var(--accent-amber); }
+
+    .sensor-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: var(--text-secondary);
+      font-size: 0.82rem;
+    }
+
+    .sensor-top svg {
+      width: 15px;
+      height: 15px;
+      stroke: var(--card-accent);
+      opacity: 0.9;
+    }
+
+    .sensor-value {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 1.65rem;
+      font-weight: 700;
       margin-top: 8px;
-      color: var(--primary-color);
+      color: var(--text-primary);
+      letter-spacing: -0.02em;
     }
 
-    /* 3. 历史趋势图表区 */
-    .chart-container {
-      background: var(--card-bg);
-      padding: 20px;
-      border-radius: var(--border-radius);
-      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-      margin-bottom: 24px;
+    .sensor-unit {
+      font-size: 0.85rem;
+      font-weight: 400;
+      color: var(--text-secondary);
+      margin-left: 3px;
     }
 
-    /* 4. 历史照片选择器区 */
-    .gallery-container {
-      background: var(--card-bg);
-      padding: 20px;
-      border-radius: var(--border-radius);
-      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    /* 3. 趨勢圖表區 */
+    .chart-wrapper {
+      position: relative;
+      height: 220px;
+      width: 100%;
     }
 
+    /* 表單控制項（深色毛玻璃風格） */
     .filter-bar {
       display: flex;
       gap: 12px;
       flex-wrap: wrap;
       align-items: center;
-      margin-bottom: 20px;
-      padding-bottom: 16px;
-      border-bottom: 1px solid #eee;
+      margin-bottom: 14px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.07);
     }
 
-    .filter-bar label, .chart-control label {
-      font-size: 0.9rem;
-      font-weight: 500;
+    .control-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
     }
 
-    .filter-bar input, .filter-bar select, .chart-control select {
-      padding: 6px 12px;
-      border: 1px solid #ccc;
+    label {
+      font-size: 0.82rem;
+      color: var(--text-secondary);
+    }
+
+    input[type="date"],
+    select {
+      background: rgba(6, 13, 11, 0.8);
+      color: var(--text-primary);
+      border: 1px solid rgba(52, 211, 153, 0.25);
       border-radius: 6px;
-      font-size: 0.9rem;
+      padding: 5px 10px;
+      font-size: 0.82rem;
       outline: none;
+      color-scheme: dark;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
     }
 
-    .filter-bar input:focus, .filter-bar select:focus, .chart-control select:focus {
-      border-color: #3498db;
+    input[type="date"]:focus,
+    select:focus {
+      border-color: var(--accent-emerald);
+      box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.18);
     }
 
-    .grid {
+    /* 4. 歷史照片網格 */
+    .photo-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-      gap: 16px;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 12px;
+      max-height: 360px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+
+    .photo-grid::-webkit-scrollbar {
+      width: 5px;
+    }
+
+    .photo-grid::-webkit-scrollbar-track {
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 4px;
+    }
+
+    .photo-grid::-webkit-scrollbar-thumb {
+      background: rgba(52, 211, 153, 0.25);
+      border-radius: 4px;
     }
 
     .photo-item {
-      border-radius: 8px;
+      border-radius: var(--radius-sm);
       overflow: hidden;
-      background: #000;
+      background: #040807;
+      border: 1px solid rgba(255, 255, 255, 0.08);
       position: relative;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
       aspect-ratio: 4 / 3;
+      transition: border-color 0.2s ease, transform 0.2s ease;
+    }
+
+    .photo-item:hover {
+      border-color: var(--accent-emerald);
+      transform: scale(1.02);
     }
 
     .photo-item img {
@@ -187,105 +474,260 @@
     }
 
     .photo-item .time {
-      font-size: 0.75rem;
-      padding: 6px;
-      background: rgba(0,0,0,0.7);
-      color: #fff;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.7rem;
+      padding: 5px 6px;
+      background: rgba(4, 10, 8, 0.78);
+      backdrop-filter: blur(4px);
+      color: #cbd5e1;
       position: absolute;
       bottom: 0;
       width: 100%;
-      box-sizing: border-box;
       text-align: center;
     }
 
     .no-data {
       grid-column: 1 / -1;
       text-align: center;
-      padding: 40px;
-      color: #888;
-      font-size: 0.95rem;
+      padding: 32px 12px;
+      color: var(--text-muted);
+      font-size: 0.85rem;
     }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>鳥巢監測 dashboard</h1>
-
-    <!-- 1. 最顶部：最新拍摄照片 -->
-    <div class="hero-photo-container">
-      <h3 class="section-title">最新抓拍</h3>
-      <div class="aspect-ratio-box" style="margin-top: 12px;">
-        <img id="latestPhoto" src="" alt="等待接收最新抓拍圖像..." style="display: none;">
-        <span id="latestPhotoPlaceholder" style="color: #aaa;">加載最新圖像中...</span>
-        <div class="hero-photo-info" id="latestPhotoMeta" style="display: none;">
-          <span id="heroCamId">Camera ID: --</span>
-          <span id="heroTimestamp">時間: --</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- 2. 最新传感器数据 -->
-    <div class="cards">
-      <div class="card">
-        <div class="label">🌡️ 溫度</div>
-        <div class="value" id="tempVal">-- °C</div>
-      </div>
-      <div class="card">
-        <div class="label">💧 濕度</div>
-        <div class="value" id="humVal">-- %</div>
-      </div>
-      <div class="card">
-        <div class="label">☀️ 光照強度</div>
-        <div class="value" id="luxVal">-- lx</div>
-      </div>
-    </div>
-
-    <!-- 3. 历史数据趋势图表 (新增数据范围控制) -->
-    <div class="chart-container">
-      <div class="section-header">
-        <h3 class="section-title">歷史數據趨勢</h3>
-        <div class="chart-control">
-          <label for="chartRangeSelect">顯示範圍：</label>
-          <select id="chartRangeSelect">
-            <option value="50" selected>最近 50 條數據</option>
-            <option value="all">全部歷史數據</option>
-          </select>
-        </div>
-      </div>
-      <canvas id="envChart" height="100"></canvas>
-    </div>
-
-    <!-- 4. 历史照片选择器与照片墙 -->
-    <div class="gallery-container">
-      <h3 class="section-title">歷史照片查詢</h3>
-      
-      <div class="filter-bar" style="margin-top: 12px;">
-        <div>
-          <label for="datePicker">選擇日期：</label>
-          <input type="date" id="datePicker">
+    <!-- 頂部狀態欄 -->
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+            <path d="M2 17l10 5 10-5"/>
+            <path d="M2 12l10 5 10-5"/>
+          </svg>
         </div>
         <div>
-          <label for="timeFilter">具體時間：</label>
-          <select id="timeFilter">
-            <option value="all">全天照片 (最近50張)</option>
-          </select>
+          <h1 class="brand-title">鳥巢生態雙節點監測系統</h1>
+          <div class="brand-subtitle">CANOPY BIO-TELEMETRY &amp; DUAL OPTICAL ARRAY</div>
         </div>
       </div>
-
-      <div class="grid" id="photoGrid">
-        <div class="no-data">正在載入圖像記錄...</div>
+      <div class="system-status">
+        <span id="lastSyncText">同步狀態：等待數據</span>
+        <span class="live-badge">
+          <span class="pulse-dot"></span>
+          <span>AUTO SYNC 30S</span>
+        </span>
       </div>
-    </div>
+    </header>
+
+    <!-- 左右兩大列 -->
+    <main class="dual-columns">
+      <!-- ==================== 左列：CAM ID 1 ==================== -->
+      <section class="cam-column" data-cam="1">
+        <div class="cam-column-header">
+          <div class="cam-id-tag">
+            <span class="cam-code">CAM-01</span>
+            <span class="cam-name">監測節點一號</span>
+          </div>
+          <span class="cam-node-state" id="nodeState1">OFFLINE</span>
+        </div>
+
+        <!-- 最新畫面 -->
+        <div class="block-panel">
+          <div class="section-header">
+            <h3 class="section-title">實時抓拍畫面</h3>
+          </div>
+          <div class="aspect-ratio-box">
+            <img id="latestPhoto1" src="" alt="CAM-01 最新圖像" style="display: none;">
+            <span class="placeholder-text" id="latestPhotoPlaceholder1">等待接收 CAM-01 圖像數據...</span>
+            <div class="hero-photo-info" id="latestPhotoMeta1" style="display: none;">
+              <span id="heroCamId1">NODE: CAM-01</span>
+              <span id="heroTimestamp1">--</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 傳感器數值 -->
+        <div class="sensor-grid">
+          <div class="sensor-card temp">
+            <div class="sensor-top">
+              <span>環境溫度</span>
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/>
+              </svg>
+            </div>
+            <div class="sensor-value"><span id="tempVal1">--</span><span class="sensor-unit">°C</span></div>
+          </div>
+          <div class="sensor-card hum">
+            <div class="sensor-top">
+              <span>相對濕度</span>
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/>
+              </svg>
+            </div>
+            <div class="sensor-value"><span id="humVal1">--</span><span class="sensor-unit">%</span></div>
+          </div>
+          <div class="sensor-card lux">
+            <div class="sensor-top">
+              <span>光照強度</span>
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="4"/>
+                <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
+              </svg>
+            </div>
+            <div class="sensor-value"><span id="luxVal1">--</span><span class="sensor-unit">lx</span></div>
+          </div>
+        </div>
+
+        <!-- 歷史趨勢圖表 -->
+        <div class="block-panel">
+          <div class="section-header">
+            <h3 class="section-title">微氣候趨勢曲線</h3>
+            <div class="control-group">
+              <label for="chartRangeSelect1">範圍</label>
+              <select id="chartRangeSelect1">
+                <option value="50" selected>最近 50 筆</option>
+                <option value="all">全部數據</option>
+              </select>
+            </div>
+          </div>
+          <div class="chart-wrapper">
+            <canvas id="envChart1"></canvas>
+          </div>
+        </div>
+
+        <!-- 歷史影像檔案 -->
+        <div class="block-panel">
+          <div class="section-header">
+            <h3 class="section-title">歷史影像檔案</h3>
+          </div>
+          <div class="filter-bar">
+            <div class="control-group">
+              <label for="datePicker1">日期</label>
+              <input type="date" id="datePicker1">
+            </div>
+            <div class="control-group">
+              <label for="timeFilter1">時段</label>
+              <select id="timeFilter1">
+                <option value="all">全天記錄 (最近 50 張)</option>
+              </select>
+            </div>
+          </div>
+          <div class="photo-grid" id="photoGrid1">
+            <div class="no-data">正在檢索 CAM-01 影像記錄...</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== 右列：CAM ID 2 ==================== -->
+      <section class="cam-column" data-cam="2">
+        <div class="cam-column-header">
+          <div class="cam-id-tag">
+            <span class="cam-code">CAM-02</span>
+            <span class="cam-name">監測節點二號</span>
+          </div>
+          <span class="cam-node-state" id="nodeState2">OFFLINE</span>
+        </div>
+
+        <!-- 最新畫面 -->
+        <div class="block-panel">
+          <div class="section-header">
+            <h3 class="section-title">實時抓拍畫面</h3>
+          </div>
+          <div class="aspect-ratio-box">
+            <img id="latestPhoto2" src="" alt="CAM-02 最新圖像" style="display: none;">
+            <span class="placeholder-text" id="latestPhotoPlaceholder2">等待接收 CAM-02 圖像數據...</span>
+            <div class="hero-photo-info" id="latestPhotoMeta2" style="display: none;">
+              <span id="heroCamId2">NODE: CAM-02</span>
+              <span id="heroTimestamp2">--</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 傳感器數值 -->
+        <div class="sensor-grid">
+          <div class="sensor-card temp">
+            <div class="sensor-top">
+              <span>環境溫度</span>
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/>
+              </svg>
+            </div>
+            <div class="sensor-value"><span id="tempVal2">--</span><span class="sensor-unit">°C</span></div>
+          </div>
+          <div class="sensor-card hum">
+            <div class="sensor-top">
+              <span>相對濕度</span>
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/>
+              </svg>
+            </div>
+            <div class="sensor-value"><span id="humVal2">--</span><span class="sensor-unit">%</span></div>
+          </div>
+          <div class="sensor-card lux">
+            <div class="sensor-top">
+              <span>光照強度</span>
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="4"/>
+                <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
+              </svg>
+            </div>
+            <div class="sensor-value"><span id="luxVal2">--</span><span class="sensor-unit">lx</span></div>
+          </div>
+        </div>
+
+        <!-- 歷史趨勢圖表 -->
+        <div class="block-panel">
+          <div class="section-header">
+            <h3 class="section-title">微氣候趨勢曲線</h3>
+            <div class="control-group">
+              <label for="chartRangeSelect2">範圍</label>
+              <select id="chartRangeSelect2">
+                <option value="50" selected>最近 50 筆</option>
+                <option value="all">全部數據</option>
+              </select>
+            </div>
+          </div>
+          <div class="chart-wrapper">
+            <canvas id="envChart2"></canvas>
+          </div>
+        </div>
+
+        <!-- 歷史影像檔案 -->
+        <div class="block-panel">
+          <div class="section-header">
+            <h3 class="section-title">歷史影像檔案</h3>
+          </div>
+          <div class="filter-bar">
+            <div class="control-group">
+              <label for="datePicker2">日期</label>
+              <input type="date" id="datePicker2">
+            </div>
+            <div class="control-group">
+              <label for="timeFilter2">時段</label>
+              <select id="timeFilter2">
+                <option value="all">全天記錄 (最近 50 張)</option>
+              </select>
+            </div>
+          </div>
+          <div class="photo-grid" id="photoGrid2">
+            <div class="no-data">正在檢索 CAM-02 影像記錄...</div>
+          </div>
+        </div>
+      </section>
+    </main>
   </div>
 
   <script>
     const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyL-Fxl_M5zIiBqsNFGSXtkcFwuoqGM8jyBN-88k_CdDXadqAtPv2TfjbiDt39CGzyC/exec";
 
-    let chartInstance = null;
-    let cachedAllRows = [];   // 缓存从 Google Sheets 拿到的所有数据
-    let cachedPhotoRows = []; // 缓存所有包含图片的数据
+    // 兩個節點的獨立狀態快取
+    const nodeStore = {
+      1: { rows: [], photos: [], chart: null },
+      2: { rows: [], photos: [], chart: null }
+    };
 
-    // 日期格式化辅助函数 (YYYY-MM-DD)
     function formatDate(d) {
       const year = d.getFullYear();
       const month = String(d.getMonth() + 1).padStart(2, '0');
@@ -293,121 +735,203 @@
       return `${year}-${month}-${day}`;
     }
 
+    function normalizeCamId(rawId) {
+      if (rawId === undefined || rawId === null) return null;
+      const str = String(rawId).trim();
+      if (str === "1" || str.toLowerCase() === "cam1" || str.toLowerCase() === "cam-01") return 1;
+      if (str === "2" || str.toLowerCase() === "cam2" || str.toLowerCase() === "cam-02") return 2;
+      return null;
+    }
+
     async function fetchData() {
       try {
         const response = await fetch(APPS_SCRIPT_URL);
         const result = await response.json();
 
-        if (result.status === "success" && result.data.length > 0) {
-          cachedAllRows = result.data;
-          
-          // 过滤出含有有效照片链接的记录
-          cachedPhotoRows = cachedAllRows.filter(r => r.imageUrl && r.imageUrl.trim() !== "");
+        if (result.status === "success" && Array.isArray(result.data)) {
+          [1, 2].forEach(camNum => {
+            const rows = result.data.filter(r => normalizeCamId(r.camId) === camNum);
+            const photos = rows.filter(r => r.imageUrl && String(r.imageUrl).trim() !== "");
 
-          // 1. 更新顶部最新照片与元数据
-          const latestPhotoRow = [...cachedPhotoRows].pop();
-          if (latestPhotoRow) {
-            const imgEl = document.getElementById('latestPhoto');
-            const placeholderEl = document.getElementById('latestPhotoPlaceholder');
-            const metaEl = document.getElementById('latestPhotoMeta');
+            nodeStore[camNum].rows = rows;
+            nodeStore[camNum].photos = photos;
 
-            imgEl.src = latestPhotoRow.imageUrl;
-            imgEl.style.display = 'block';
-            placeholderEl.style.display = 'none';
-            metaEl.style.display = 'flex';
+            updateNodeUI(camNum);
+          });
 
-            document.getElementById('heroCamId').innerText = `Camera ID: ${latestPhotoRow.camId}`;
-            document.getElementById('heroTimestamp').innerText = `拍攝時間: ${new Date(latestPhotoRow.timestamp).toLocaleString()}`;
-          }
-
-          // 2. 更新传感器当前最新数值
-          const latestData = cachedAllRows[cachedAllRows.length - 1];
-          document.getElementById('tempVal').innerText = `${latestData.temp !== "" ? latestData.temp : '--'} °C`;
-          document.getElementById('humVal').innerText = `${latestData.hum !== "" ? latestData.hum : '--'} %`;
-          document.getElementById('luxVal').innerText = `${latestData.lux !== "" ? latestData.lux : '--'} lx`;
-
-          // 3. 渲染趋势图表
-          renderChart();
-
-          // 4. 初始化/更新日期选择器与照片列表
-          initDatePickerAndGallery();
+          document.getElementById('lastSyncText').innerText =
+            `最後同步：${new Date().toLocaleTimeString()}`;
         }
       } catch (err) {
         console.error("加載數據失敗:", err);
+        document.getElementById('lastSyncText').innerText = "同步狀態：連線異常";
       }
     }
 
-    function renderChart() {
-      if (!cachedAllRows || cachedAllRows.length === 0) return;
+    function updateNodeUI(camNum) {
+      const { rows, photos } = nodeStore[camNum];
+      const stateEl = document.getElementById(`nodeState${camNum}`);
 
-      const rangeValue = document.getElementById('chartRangeSelect').value;
-      
-      // 根据选择的范围，裁剪要展示的数据（默认截取最后 50 条）
-      let displayRows = cachedAllRows;
-      if (rangeValue === '50') {
-        displayRows = cachedAllRows.slice(-50);
+      if (rows.length === 0) {
+        stateEl.innerText = "NO SIGNAL";
+        stateEl.style.color = "#64748b";
+        document.getElementById(`photoGrid${camNum}`).innerHTML =
+          `<div class="no-data">尚無 CAM-0${camNum} 的歷史數據</div>`;
+        return;
       }
 
-      const labels = displayRows.map(r => new Date(r.timestamp).toLocaleTimeString());
+      stateEl.innerText = `ACTIVE | ${rows.length} REC`;
+      stateEl.style.color = camNum === 1 ? "#6ee7b7" : "#7dd3fc";
+
+      // 1. 更新最新照片
+      const latestPhotoRow = photos[photos.length - 1];
+      if (latestPhotoRow) {
+        const imgEl = document.getElementById(`latestPhoto${camNum}`);
+        const placeholderEl = document.getElementById(`latestPhotoPlaceholder${camNum}`);
+        const metaEl = document.getElementById(`latestPhotoMeta${camNum}`);
+
+        imgEl.src = latestPhotoRow.imageUrl;
+        imgEl.style.display = 'block';
+        placeholderEl.style.display = 'none';
+        metaEl.style.display = 'flex';
+
+        document.getElementById(`heroCamId${camNum}`).innerText = `NODE: CAM-0${camNum}`;
+        document.getElementById(`heroTimestamp${camNum}`).innerText =
+          new Date(latestPhotoRow.timestamp).toLocaleString();
+      }
+
+      // 2. 更新最新傳感器數值
+      const latestData = rows[rows.length - 1];
+      document.getElementById(`tempVal${camNum}`).innerText =
+        latestData.temp !== "" && latestData.temp !== undefined ? latestData.temp : '--';
+      document.getElementById(`humVal${camNum}`).innerText =
+        latestData.hum !== "" && latestData.hum !== undefined ? latestData.hum : '--';
+      document.getElementById(`luxVal${camNum}`).innerText =
+        latestData.lux !== "" && latestData.lux !== undefined ? latestData.lux : '--';
+
+      // 3. 繪製該節點圖表
+      renderChart(camNum);
+
+      // 4. 初始化/更新日期選擇器與照片網格
+      initDatePickerAndGallery(camNum);
+    }
+
+    function renderChart(camNum) {
+      const rows = nodeStore[camNum].rows;
+      if (!rows || rows.length === 0) return;
+
+      const rangeValue = document.getElementById(`chartRangeSelect${camNum}`).value;
+      const displayRows = rangeValue === '50' ? rows.slice(-50) : rows;
+
+      const labels = displayRows.map(r => new Date(r.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
       const temps = displayRows.map(r => r.temp);
       const hums = displayRows.map(r => r.hum);
       const luxs = displayRows.map(r => r.lux);
 
-      if (chartInstance) {
-        chartInstance.destroy();
+      if (nodeStore[camNum].chart) {
+        nodeStore[camNum].chart.destroy();
       }
 
-      const ctx = document.getElementById('envChart').getContext('2d');
-      chartInstance = new Chart(ctx, {
+      const ctx = document.getElementById(`envChart${camNum}`).getContext('2d');
+      nodeStore[camNum].chart = new Chart(ctx, {
         type: 'line',
         data: {
-          labels: labels,
+          labels,
           datasets: [
-            { label: '溫度 (°C)', data: temps, borderColor: '#e74c3c', fill: false, tension: 0.2, yAxisID: 'y' },
-            { label: '濕度 (%)', data: hums, borderColor: '#3498db', fill: false, tension: 0.2, yAxisID: 'y' },
-            { label: '光照 (lx)', data: luxs, borderColor: '#f1c40f', fill: false, tension: 0.2, yAxisID: 'y1' }
+            {
+              label: '溫度 (°C)',
+              data: temps,
+              borderColor: '#f87171',
+              backgroundColor: 'rgba(248, 113, 113, 0.12)',
+              borderWidth: 2,
+              pointRadius: 1.5,
+              tension: 0.3,
+              yAxisID: 'y'
+            },
+            {
+              label: '濕度 (%)',
+              data: hums,
+              borderColor: '#38bdf8',
+              backgroundColor: 'rgba(56, 189, 248, 0.12)',
+              borderWidth: 2,
+              pointRadius: 1.5,
+              tension: 0.3,
+              yAxisID: 'y'
+            },
+            {
+              label: '光照 (lx)',
+              data: luxs,
+              borderColor: '#fbbf24',
+              backgroundColor: 'rgba(251, 191, 36, 0.10)',
+              borderWidth: 1.8,
+              pointRadius: 1.5,
+              tension: 0.3,
+              yAxisID: 'y1'
+            }
           ]
         },
         options: {
           responsive: true,
+          maintainAspectRatio: false,
           interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: {
+              labels: {
+                color: '#cbd5e1',
+                boxWidth: 12,
+                font: { size: 11 }
+              }
+            }
+          },
           scales: {
-            y: { type: 'linear', position: 'left', title: { display: true, text: '溫濕度' } },
-            y1: { type: 'linear', position: 'right', grid: { drawOnChartArea: false }, title: { display: true, text: '光照 (lx)' } }
+            x: {
+              ticks: { color: '#64748b', maxRotation: 0, autoSkipPadding: 16, font: { size: 10 } },
+              grid: { color: 'rgba(255, 255, 255, 0.04)' }
+            },
+            y: {
+              type: 'linear',
+              position: 'left',
+              ticks: { color: '#94a3b8', font: { size: 10 } },
+              grid: { color: 'rgba(255, 255, 255, 0.06)' },
+              title: { display: true, text: '溫濕度', color: '#94a3b8', font: { size: 11 } }
+            },
+            y1: {
+              type: 'linear',
+              position: 'right',
+              ticks: { color: '#fbbf24', font: { size: 10 } },
+              grid: { drawOnChartArea: false },
+              title: { display: true, text: '光照 (lx)', color: '#fbbf24', font: { size: 11 } }
+            }
           }
         }
       });
     }
 
-    function initDatePickerAndGallery() {
-      const datePicker = document.getElementById('datePicker');
-      
-      // 默认选中最新照片的日期
+    function initDatePickerAndGallery(camNum) {
+      const datePicker = document.getElementById(`datePicker${camNum}`);
+      const photos = nodeStore[camNum].photos;
+
       if (!datePicker.value) {
-        const defaultDate = cachedPhotoRows.length > 0 
-          ? new Date(cachedPhotoRows[cachedPhotoRows.length - 1].timestamp)
+        const defaultDate = photos.length > 0
+          ? new Date(photos[photos.length - 1].timestamp)
           : new Date();
         datePicker.value = formatDate(defaultDate);
       }
 
-      updateGalleryByDate();
+      updateGalleryByDate(camNum);
     }
 
-    function updateGalleryByDate() {
-      const datePicker = document.getElementById('datePicker');
-      const timeFilter = document.getElementById('timeFilter');
+    function updateGalleryByDate(camNum) {
+      const datePicker = document.getElementById(`datePicker${camNum}`);
+      const timeFilter = document.getElementById(`timeFilter${camNum}`);
+      const photos = nodeStore[camNum].photos;
 
       const selectedDateStr = datePicker.value;
       if (!selectedDateStr) return;
 
-      // 筛选指定日期的照片
-      const filteredByDate = cachedPhotoRows.filter(r => {
-        const itemDateStr = formatDate(new Date(r.timestamp));
-        return itemDateStr === selectedDateStr;
-      });
+      const filteredByDate = photos.filter(r => formatDate(new Date(r.timestamp)) === selectedDateStr);
 
-      // 更新具体时间下拉框选项
-      timeFilter.innerHTML = '<option value="all">全天照片 (最近50張)</option>';
+      timeFilter.innerHTML = '<option value="all">全天記錄 (最近 50 張)</option>';
       filteredByDate.forEach((r, idx) => {
         const timeStr = new Date(r.timestamp).toLocaleTimeString();
         const opt = document.createElement('option');
@@ -416,21 +940,18 @@
         timeFilter.appendChild(opt);
       });
 
-      renderPhotoGrid(filteredByDate);
+      renderPhotoGrid(camNum, filteredByDate);
     }
 
-    function renderPhotoGrid(photos) {
-      const photoGrid = document.getElementById('photoGrid');
-      const timeFilter = document.getElementById('timeFilter');
+    function renderPhotoGrid(camNum, photos) {
+      const photoGrid = document.getElementById(`photoGrid${camNum}`);
+      const timeFilter = document.getElementById(`timeFilter${camNum}`);
       photoGrid.innerHTML = '';
 
       let displayPhotos = photos;
-      
       if (timeFilter.value === 'all') {
-        // 如果选择“全天照片”，仅显示最新的 50 张
         displayPhotos = photos.slice(-50);
       } else {
-        // 如果选择了特定时间点，只展示选中的那 1 张
         const targetIdx = parseInt(timeFilter.value, 10);
         if (!isNaN(targetIdx) && photos[targetIdx]) {
           displayPhotos = [photos[targetIdx]];
@@ -438,34 +959,35 @@
       }
 
       if (displayPhotos.length === 0) {
-        photoGrid.innerHTML = '<div class="no-data">該選擇日期下未檢索到圖像</div>';
+        photoGrid.innerHTML = '<div class="no-data">該日期下無影像記錄</div>';
         return;
       }
 
-      // 倒序展示（最新时间在最前面）
       displayPhotos.slice().reverse().forEach(row => {
         const item = document.createElement('div');
         item.className = 'photo-item';
         item.innerHTML = `
-          <a href="${row.imageUrl}" target="_blank" title="點擊查看原圖">
-            <img src="${row.imageUrl}" alt="ESP32 照片">
+          <a href="${row.imageUrl}" target="_blank" title="開啟原圖">
+            <img src="${row.imageUrl}" alt="CAM-0${camNum} 歷史影像" loading="lazy">
           </a>
-          <div class="time">${new Date(row.timestamp).toLocaleString()}</div>
+          <div class="time">${new Date(row.timestamp).toLocaleTimeString()}</div>
         `;
         photoGrid.appendChild(item);
       });
     }
 
-    // 事件绑定
-    document.getElementById('chartRangeSelect').addEventListener('change', renderChart);
-    document.getElementById('datePicker').addEventListener('change', updateGalleryByDate);
-    document.getElementById('timeFilter').addEventListener('change', () => {
-      const selectedDateStr = document.getElementById('datePicker').value;
-      const filteredByDate = cachedPhotoRows.filter(r => formatDate(new Date(r.timestamp)) === selectedDateStr);
-      renderPhotoGrid(filteredByDate);
+    // 綁定雙節點控制事件
+    [1, 2].forEach(camNum => {
+      document.getElementById(`chartRangeSelect${camNum}`).addEventListener('change', () => renderChart(camNum));
+      document.getElementById(`datePicker${camNum}`).addEventListener('change', () => updateGalleryByDate(camNum));
+      document.getElementById(`timeFilter${camNum}`).addEventListener('change', () => {
+        const selectedDateStr = document.getElementById(`datePicker${camNum}`).value;
+        const filteredByDate = nodeStore[camNum].photos.filter(r => formatDate(new Date(r.timestamp)) === selectedDateStr);
+        renderPhotoGrid(camNum, filteredByDate);
+      });
     });
 
-    // 首次加载与定时刷新 (每 30 秒)
+    // 首次加載與 30 秒自動輪詢
     fetchData();
     setInterval(fetchData, 30000);
   </script>
