@@ -1,1 +1,16 @@
+{
+  "name": "ESP32 Group 11",
+  "version": "1.0.0",
+  "new_install_prompt_erase": true,
+  "builds": [
+    {
+      "parts": [
+        {
+          "path": "./11.bin",
+          "offset": 0
+        }
+      ]
+    }
+  ]
+}
 
