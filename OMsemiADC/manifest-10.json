@@ -1,1 +1,16 @@
+{
+  "name": "ESP32 Group 10",
+  "version": "1.0.0",
+  "new_install_prompt_erase": true,
+  "builds": [
+    {
+      "parts": [
+        {
+          "path": "./10.bin",
+          "offset": 0
+        }
+      ]
+    }
+  ]
+}
 
